@@ -58,7 +58,7 @@ public final class NetworkConfig {
      *
      * @return 本地TCP服务的读写线程数量
      */
-    public int getTcp_ioThreadNumber() {
+    public int getTCPioThreadNumber() {
         return this.tcp_ioThreadNumber;
     }
 
@@ -67,7 +67,7 @@ public final class NetworkConfig {
      *
      * @return 本地TCP服务的业务处理线程数量
      */
-    public int getUdp_execThreadNumber() {
+    public int getTCPexecThreadNumber() {
         return this.tcp_exeThreadNumber;
     }
 

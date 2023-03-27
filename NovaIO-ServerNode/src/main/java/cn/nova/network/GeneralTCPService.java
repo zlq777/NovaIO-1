@@ -30,9 +30,9 @@ public final class GeneralTCPService implements TCPService {
     public GeneralTCPService(NetworkConfig config, MsgHandler handler) {
         this.config = config;
         this.acceptThreadGroup = new NioEventLoopGroup(1);
-        this.ioThreadGroup = new NioEventLoopGroup(config.getUDPioThreadNumber(),
+        this.ioThreadGroup = new NioEventLoopGroup(config.getTCPioThreadNumber(),
                 getThreadFactory("tcp-io", true));
-        this.exeThreadGroup = new UnorderedThreadPoolEventExecutor(config.getUDPexecThreadNumber(),
+        this.exeThreadGroup = new UnorderedThreadPoolEventExecutor(config.getTCPexecThreadNumber(),
                 getThreadFactory("tcp-exec", true));
 
         this.bootstrap = new ServerBootstrap()
