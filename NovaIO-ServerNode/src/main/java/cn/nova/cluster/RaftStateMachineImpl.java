@@ -530,8 +530,8 @@ public final class RaftStateMachineImpl implements RaftStateMachine {
                         task.onSyncFinish(syncedEntryIndex);
                         task = inSyncTask = taskQueue.poll();
                         if (task != null) {
-                            storage.writeEntry(syncedEntryIndex, task.entryData());
                             syncedNodeNumber = 1;
+                            storage.writeEntry(syncedEntryIndex, task.entryData());
                         }
                     }
                 }
@@ -558,6 +558,7 @@ public final class RaftStateMachineImpl implements RaftStateMachine {
         if (state == RaftState.LEADER) {
 
             if (inSyncTask == null) {
+
                 long entryIndex = syncedEntryIndex + 1;
 
                 inSyncTask = task;
@@ -565,6 +566,7 @@ public final class RaftStateMachineImpl implements RaftStateMachine {
                 storage.writeEntry(entryIndex, task.entryData());
 
                 changeSyncedEntryIndex(entryIndex);
+                sendEntrySyncMsg();
 
             } else {
                 taskQueue.add(task);

@@ -6,7 +6,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.socket.DatagramPacket;
 
 /**
- * {@link RaftService}负责提供raft分布式共识算法实现相关的服务接口
+ * {@link RaftService}负责提供面向其它节点、与raft分布式共识算法实现相关的UDP服务接口
  *
  * @author RealDragonking
  */
