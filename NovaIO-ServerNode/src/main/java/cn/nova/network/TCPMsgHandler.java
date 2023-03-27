@@ -28,6 +28,7 @@ public final class TCPMsgHandler extends MsgHandler {
      *
      * @param handleServiceEntity 处理服务实体
      */
+    @Override
     public void register(Object handleServiceEntity) {
         Class<?> entityClass = handleServiceEntity.getClass();
         Method[] methods = entityClass.getMethods();
