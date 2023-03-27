@@ -27,6 +27,7 @@ public final class GeneralUDPService implements UDPService {
 
     public GeneralUDPService(NetworkConfig config, MsgHandler handler) {
         this.config = config;
+
         this.ioThreadGroup = new NioEventLoopGroup(config.getUDPioThreadNumber(),
                 getThreadFactory("udp-io", true));
         this.exeThreadGroup = new UnorderedThreadPoolEventExecutor(config.getUDPexecThreadNumber(),

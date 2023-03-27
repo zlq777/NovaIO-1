@@ -29,6 +29,7 @@ public final class GeneralTCPService implements TCPService {
 
     public GeneralTCPService(NetworkConfig config, MsgHandler handler) {
         this.config = config;
+
         this.acceptThreadGroup = new NioEventLoopGroup(1);
         this.ioThreadGroup = new NioEventLoopGroup(config.getTCPioThreadNumber(),
                 getThreadFactory("tcp-io", true));

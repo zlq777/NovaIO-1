@@ -29,6 +29,7 @@ public class EpollTCPService implements TCPService {
 
     public EpollTCPService(NetworkConfig config, MsgHandler handler) {
         this.config = config;
+
         this.acceptThreadGroup = new EpollEventLoopGroup(1);
         this.ioThreadGroup = new EpollEventLoopGroup(config.getTCPioThreadNumber(),
                 getThreadFactory("tcp-io", true));
