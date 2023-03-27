@@ -6,10 +6,8 @@ import cn.nova.cluster.RaftStateMachineImpl;
 import cn.nova.config.SourceConfig;
 import cn.nova.config.NetworkConfig;
 import cn.nova.config.TimeConfig;
-import cn.nova.network.MsgHandler;
-import cn.nova.network.TCPMsgHandler;
-import cn.nova.network.UDPMsgHandler;
-import cn.nova.network.UDPService;
+import cn.nova.network.*;
+import cn.nova.service.ClientService;
 import cn.nova.service.RaftService;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.util.HashedWheelTimer;
@@ -42,9 +40,9 @@ public final class Launcher {
         LocalStorage storage = initEntryStore();
 
         MsgHandler udpHandler = new UDPMsgHandler();
-        UDPService udpService = initUDPService(netConfig, udpHandler);
-
+        UDPService udpService = selectUDPService(netConfig, udpHandler);
         MsgHandler tcpHandler = new TCPMsgHandler();
+        TCPService tcpService = selectTCPService(netConfig, tcpHandler);
 
         int tickTime = 20;
 
@@ -64,13 +62,18 @@ public final class Launcher {
 
         udpHandler.register(new RaftService(stateMachine));
 
+        tcpHandler.register(new ClientService(stateMachine));
+
         onShutdown(() -> {
             udpService.close();
+            tcpService.close();
             storage.close();
             timer.stop();
         });
 
+        startUDPService(udpService);
         stateMachine.start();
+        startTCPService(tcpService);
     }
 
 }

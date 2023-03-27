@@ -22,23 +22,17 @@ public final class GeneralUDPService implements UDPService {
     private final NetworkConfig config;
     private final EventLoopGroup ioThreadGroup;
     private final EventExecutorGroup exeThreadGroup;
+    private final Bootstrap bootstrap;
     private Channel channel;
 
-    public GeneralUDPService(NetworkConfig config) {
+    public GeneralUDPService(NetworkConfig config, MsgHandler handler) {
         this.config = config;
-        this.ioThreadGroup = new NioEventLoopGroup(config.getIoThreadNumber(), getThreadFactory("io", true));
-        this.exeThreadGroup = new UnorderedThreadPoolEventExecutor(config.getExeThreadNumber(), getThreadFactory("exe", true));
-    }
+        this.ioThreadGroup = new NioEventLoopGroup(config.getIoThreadNumber(),
+                getThreadFactory("io", true));
+        this.exeThreadGroup = new UnorderedThreadPoolEventExecutor(config.getExeThreadNumber(),
+                getThreadFactory("exe", true));
 
-    /**
-     * 初始化启动此{@link UDPService}
-     *
-     * @param handler 消息处理器
-     * @return 是否成功启动
-     */
-    @Override
-    public boolean start(MsgHandler handler) {
-        Bootstrap bootstrap = new Bootstrap()
+        this.bootstrap = new Bootstrap()
                 .group(ioThreadGroup)
                 .channel(NioDatagramChannel.class)
                 .handler(new ChannelInitializer<DatagramChannel>() {
@@ -47,7 +41,15 @@ public final class GeneralUDPService implements UDPService {
                         ch.pipeline().addLast(exeThreadGroup, handler);
                     }
                 });
+    }
 
+    /**
+     * 初始化启动此{@link UDPService}
+     *
+     * @return 是否成功启动
+     */
+    @Override
+    public boolean start() {
         try {
             int listenPort = config.getUDPListenPort();
             this.channel = bootstrap.bind(listenPort).sync().channel();

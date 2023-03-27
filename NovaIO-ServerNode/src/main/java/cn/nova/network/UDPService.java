@@ -12,10 +12,9 @@ public interface UDPService {
     /**
      * 初始化启动此{@link UDPService}
      *
-     * @param handler 消息处理器
      * @return 是否成功启动
      */
-    boolean start(MsgHandler handler);
+    boolean start();
 
     /**
      * 发送{@link DatagramPacket}数据包

@@ -54,26 +54,6 @@ public final class LaunchUtils {
     }
 
     /**
-     * 初始化加载{@link SourceConfig}
-     *
-     * @return {@link SourceConfig}
-     */
-    public static SourceConfig initSourceConfig() {
-        LOG.info("正在初始化加载本地配置信息...");
-
-        SourceConfig srcConfig = SourceConfig.init();
-
-        if (srcConfig == null) {
-            LOG.error("本地配置信息加载失败，当前节点进程正在关闭...");
-            System.exit(0);
-        } else {
-            LOG.info("本地配置信息加载成功");
-        }
-
-        return srcConfig;
-    }
-
-    /**
      * 初始化加载集群成员的配置信息
      *
      * @return 集群成员的配置信息
@@ -133,6 +113,26 @@ public final class LaunchUtils {
     }
 
     /**
+     * 初始化加载{@link SourceConfig}
+     *
+     * @return {@link SourceConfig}
+     */
+    public static SourceConfig initSourceConfig() {
+        LOG.info("正在初始化加载本地配置信息...");
+
+        SourceConfig srcConfig = SourceConfig.init();
+
+        if (srcConfig == null) {
+            LOG.error("本地配置信息加载失败，当前节点进程正在关闭...");
+            System.exit(0);
+        } else {
+            LOG.info("本地配置信息加载成功");
+        }
+
+        return srcConfig;
+    }
+
+    /**
      * 初始化加载{@link LocalStorage}
      *
      * @return {@link LocalStorage}
@@ -159,34 +159,81 @@ public final class LaunchUtils {
     }
 
     /**
-     * 初始化启动{@link UDPService}
+     * 基于当前运行环境，选择合适的{@link UDPService}
      *
      * @param config {@link NetworkConfig}
-     * @param provider {@link UDPMsgHandler}
+     * @param handler {@link MsgHandler}
      * @return {@link UDPService}
      */
-    public static UDPService initUDPService(NetworkConfig config, MsgHandler provider) {
-        LOG.info("正在初始化启动UDP服务...");
+    public static UDPService selectUDPService(NetworkConfig config, MsgHandler handler) {
+        LOG.info("正在初始化选择UDP服务内核...");
 
         UDPService udpService;
 
         if (Epoll.isAvailable()) {
-            udpService = new EpollUDPService(config);
+            udpService = new EpollUDPService(config, handler);
         } else {
-            udpService = new GeneralUDPService(config);
+            udpService = new GeneralUDPService(config, handler);
         }
 
         LOG.info("检测到基于 " + PlatformDependent.normalizedOs() + "_" + PlatformDependent.normalizedArch() +
-                " 平台运行，使用 " + (Epoll.isAvailable() ? "epoll" : "general") + " io内核");
-
-        if (! udpService.start(provider)) {
-            LOG.error("UDP服务启动失败，当前节点进程正在关闭...");
-            System.exit(0);
-        } else {
-            LOG.info("UDP服务启动成功，正在监听 " + config.getUDPListenPort() + " 端口");
-        }
+                " 平台运行，使用 " + (Epoll.isAvailable() ? "epoll" : "general") + " UDP服务内核");
 
         return udpService;
+    }
+
+    /**
+     * 基于当前运行环境，选择合适的{@link TCPService}
+     *
+     * @param config {@link NetworkConfig}
+     * @param handler {@link MsgHandler}
+     * @return {@link TCPService}
+     */
+    public static TCPService selectTCPService(NetworkConfig config, MsgHandler handler) {
+        LOG.info("正在初始化选择TCP服务内核...");
+
+        TCPService tcpService;
+
+        if (Epoll.isAvailable()) {
+            tcpService = new EpollTCPService(config, handler);
+        } else {
+            tcpService = new GeneralTCPService(config, handler);
+        }
+
+        LOG.info("检测到基于 " + PlatformDependent.normalizedOs() + "_" + PlatformDependent.normalizedArch() +
+                " 平台运行，使用 " + (Epoll.isAvailable() ? "epoll" : "general") + " TCP服务内核");
+
+        return tcpService;
+    }
+
+    /**
+     * 尝试启动{@link UDPService}
+     *
+     * @param udpService {@link UDPService}
+     */
+    public static void startUDPService(UDPService udpService) {
+        LOG.info("正在初始化启动UDP服务...");
+        if (udpService.start()) {
+            LOG.info("UDP服务启动成功");
+        } else {
+            LOG.info("UDP服务启动失败，正在退出当前节点进程...");
+            System.exit(0);
+        }
+    }
+
+    /**
+     * 尝试启动{@link TCPService}
+     *
+     * @param tcpService {@link TCPService}
+     */
+    public static void startTCPService(TCPService tcpService) {
+        LOG.info("正在初始化启动TCP服务...");
+        if (tcpService.start()) {
+            LOG.info("TCP服务启动成功");
+        } else {
+            LOG.info("TCP服务启动失败，正在退出当前节点进程...");
+            System.exit(0);
+        }
     }
 
     /**

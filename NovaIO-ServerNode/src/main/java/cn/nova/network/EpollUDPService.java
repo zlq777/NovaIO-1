@@ -24,24 +24,17 @@ public final class EpollUDPService implements UDPService {
     private final NetworkConfig config;
     private final EventLoopGroup ioThreadGroup;
     private final EventExecutorGroup exeThreadGroup;
+    private final Bootstrap bootstrap;
     private Entry loopEntry;
 
-    public EpollUDPService(NetworkConfig config) {
+    public EpollUDPService(NetworkConfig config, MsgHandler handler) {
         this.config = config;
-        this.ioThreadGroup = new EpollEventLoopGroup(config.getIoThreadNumber(), getThreadFactory("io", true));
-        this.exeThreadGroup = new UnorderedThreadPoolEventExecutor(config.getExeThreadNumber(), getThreadFactory("exe", true));
-    }
+        this.ioThreadGroup = new EpollEventLoopGroup(config.getIoThreadNumber(),
+                getThreadFactory("io", true));
+        this.exeThreadGroup = new UnorderedThreadPoolEventExecutor(config.getExeThreadNumber(),
+                getThreadFactory("exe", true));
 
-    /**
-     * 初始化启动此{@link UDPService}。由于epoll UDP会需要我们创建多个{@link Channel}，数据发送操作操作的负载均衡
-     * 也因此需要实现。为了最大化提升性能，我们选择使用完全无锁的循环链表来实现轮询模式的负载均衡
-     *
-     * @param handler 消息处理器
-     * @return 是否成功启动
-     */
-    @Override
-    public boolean start(MsgHandler handler) {
-        Bootstrap bootstrap = new Bootstrap()
+        this.bootstrap = new Bootstrap()
                 .group(ioThreadGroup)
                 .option(EpollChannelOption.SO_REUSEPORT, true)
                 .channel(EpollDatagramChannel.class)
@@ -51,7 +44,16 @@ public final class EpollUDPService implements UDPService {
                         ch.pipeline().addLast(exeThreadGroup, handler);
                     }
                 });
+    }
 
+    /**
+     * 初始化启动此{@link UDPService}。由于epoll UDP会需要我们创建多个{@link Channel}，数据发送操作操作的负载均衡
+     * 也因此需要实现。为了最大化提升性能，我们选择使用完全无锁的循环链表来实现轮询模式的负载均衡
+     *
+     * @return 是否成功启动
+     */
+    @Override
+    public boolean start() {
         try {
             int listenPort = config.getUDPListenPort();
             int ioThreads = config.getIoThreadNumber();
