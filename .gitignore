@@ -1,3 +1,5 @@
 /.idea/
 /NovaIO-ServerNode/.gradle/
 /NovaIO-ServerNode/build/
+/NovaIO-Client/.gradle/
+/NovaIO-Client/build/
