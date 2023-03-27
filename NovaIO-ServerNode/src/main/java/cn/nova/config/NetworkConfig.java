@@ -7,16 +7,23 @@ package cn.nova.config;
  */
 public final class NetworkConfig {
 
-    private final int ioThreadNumber;
-    private final int exeThreadNumber;
+    private final int udp_ioThreadNumber;
+    private final int udp_execThreadNumber;
     private final int udpListenPort;
+    private final int tcp_ioThreadNumber;
+    private final int tcp_exeThreadNumber;
+    private final String tcpBindAddress;
+    private final int tcpBindPort;
 
-    public NetworkConfig(SourceConfig src) {
-        int processNumber = Runtime.getRuntime().availableProcessors();
-        this.ioThreadNumber = src.getIntValue("udp-io-thread-number", processNumber);
-        this.exeThreadNumber = src.getIntValue("udp-exe-thread-number", processNumber);
+    public NetworkConfig(SourceConfig srcConfig) {
+        this.udp_ioThreadNumber = srcConfig.getIntValue("udp-io-thread-number", 1);
+        this.udp_execThreadNumber = srcConfig.getIntValue("udp-exec-thread-number", 1);
+        this.udpListenPort = srcConfig.getIntValue("udp-listen-port", 8080);
 
-        this.udpListenPort = src.getIntValue("udp-listen-port", 8080);
+        this.tcp_ioThreadNumber = srcConfig.getIntValue("tcp-io-thread-number", 1);
+        this.tcp_exeThreadNumber = srcConfig.getIntValue("tcp-exe-thread-number", 1);
+        this.tcpBindAddress = srcConfig.getString("tcp-bind-ip-address");
+        this.tcpBindPort = srcConfig.getIntValue("tcp-bind-port", 8081);
     }
 
     /**
@@ -24,8 +31,8 @@ public final class NetworkConfig {
      *
      * @return 本地UDP服务执行读写任务的线程数量
      */
-    public int getIoThreadNumber() {
-        return this.ioThreadNumber;
+    public int getUDPioThreadNumber() {
+        return this.udp_ioThreadNumber;
     }
 
     /**
@@ -33,8 +40,8 @@ public final class NetworkConfig {
      *
      * @return 本地UDP服务执行处理任务的线程数量
      */
-    public int getExeThreadNumber() {
-        return this.exeThreadNumber;
+    public int getUDPexecThreadNumber() {
+        return this.udp_execThreadNumber;
     }
 
     /**
@@ -44,6 +51,42 @@ public final class NetworkConfig {
      */
     public int getUDPListenPort() {
         return this.udpListenPort;
+    }
+
+    /**
+     * 获取到本地TCP服务的读写线程数量
+     *
+     * @return 本地TCP服务的读写线程数量
+     */
+    public int getTcp_ioThreadNumber() {
+        return this.tcp_ioThreadNumber;
+    }
+
+    /**
+     * 获取到本地TCP服务的业务处理线程数量
+     *
+     * @return 本地TCP服务的业务处理线程数量
+     */
+    public int getUdp_execThreadNumber() {
+        return this.tcp_exeThreadNumber;
+    }
+
+    /**
+     * 获取到本地TCP服务绑定的ip-address
+     *
+     * @return 本地TCP服务绑定的ip-address
+     */
+    public String getTcpBindAddress() {
+        return this.tcpBindAddress;
+    }
+
+    /**
+     * 获取到本地TCP服务绑定的port端口号
+     *
+     * @return 本地TCP服务绑定的port端口号
+     */
+    public int getTcpBindPort() {
+        return this.tcpBindPort;
     }
 
 }

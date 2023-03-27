@@ -54,9 +54,9 @@ public final class LaunchUtils {
     }
 
     /**
-     * 初始化加载集群成员的配置信息
+     * 初始化加载{@link ClusterInfo}集群配置信息
      *
-     * @return 集群成员的配置信息
+     * @return {@link ClusterInfo}
      */
     public static ClusterInfo initClusterNodeInfo() {
         LOG.info("正在初始化加载集群配置信息...");

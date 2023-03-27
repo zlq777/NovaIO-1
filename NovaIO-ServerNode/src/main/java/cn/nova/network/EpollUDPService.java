@@ -29,10 +29,10 @@ public final class EpollUDPService implements UDPService {
 
     public EpollUDPService(NetworkConfig config, MsgHandler handler) {
         this.config = config;
-        this.ioThreadGroup = new EpollEventLoopGroup(config.getIoThreadNumber(),
-                getThreadFactory("io", true));
-        this.exeThreadGroup = new UnorderedThreadPoolEventExecutor(config.getExeThreadNumber(),
-                getThreadFactory("exe", true));
+        this.ioThreadGroup = new EpollEventLoopGroup(config.getUDPioThreadNumber(),
+                getThreadFactory("udp-io", true));
+        this.exeThreadGroup = new UnorderedThreadPoolEventExecutor(config.getUDPexecThreadNumber(),
+                getThreadFactory("udp-exec", true));
 
         this.bootstrap = new Bootstrap()
                 .group(ioThreadGroup)
@@ -56,7 +56,7 @@ public final class EpollUDPService implements UDPService {
     public boolean start() {
         try {
             int listenPort = config.getUDPListenPort();
-            int ioThreads = config.getIoThreadNumber();
+            int ioThreads = config.getUDPioThreadNumber();
 
             Channel[] channels = new Channel[ioThreads];
 
@@ -108,7 +108,7 @@ public final class EpollUDPService implements UDPService {
         Entry head = new Entry(channels[0]);
         Entry node, prev = head;
 
-        int ioThreads = config.getIoThreadNumber();
+        int ioThreads = config.getUDPioThreadNumber();
 
         for (int i = 1; i < ioThreads; i++) {
             node = new Entry(channels[i]);

@@ -6,10 +6,22 @@
 udp-io-thread-number = 2
 
 # 本地UDP服务的业务处理线程数量
-udp-exe-thread-number = 2
+udp-exec-thread-number = 2
 
 # 本地UDP服务监听的port端口号
 udp-listen-port = 3000
+
+# 本地TCP服务的读写线程数量
+tcp-io-thread-number = 2
+
+# 本地TCP服务的业务处理线程数量
+tcp-exe-thread-number = 2
+
+# 本地TCP服务绑定的ip-address
+tcp-bind-ip-address = 127.0.0.1
+
+# 本地TCP服务绑定的port端口号
+tcp-bind-port = 4000
 
 #########################
 #      Time计时配置
