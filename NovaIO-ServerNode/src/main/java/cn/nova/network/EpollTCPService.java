@@ -71,6 +71,7 @@ public class EpollTCPService implements TCPService {
     public void close() {
         acceptThreadGroup.shutdownGracefully();
         ioThreadGroup.shutdownGracefully();
+        exeThreadGroup.shutdownGracefully();
     }
 
 }
