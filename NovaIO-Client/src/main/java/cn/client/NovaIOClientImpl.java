@@ -3,12 +3,15 @@ package cn.client;
 import io.netty.buffer.ByteBuf;
 
 /**
- * {@link NovaIOClient}定义了与NovaIO服务节点进行通信的客户端，提供了一系列基本api实现Entry块数据的读写功能。
- * 所有的api都是异步非阻塞的。
+ * {@link NovaIOClient}的默认实现类
  *
  * @author RealDragonking
  */
-public interface NovaIOClient {
+public class NovaIOClientImpl implements NovaIOClient {
+
+    public NovaIOClientImpl() {
+
+    }
 
     /**
      * 根据给定的Entry序列号，从集群中读取对应的Entry块数据
@@ -16,7 +19,10 @@ public interface NovaIOClient {
      * @param entryIndex Entry序列号
      * @return {@link AsyncFuture}
      */
-    AsyncFuture<ReadEntryResult> readEntry(long entryIndex);
+    @Override
+    public AsyncFuture<ReadEntryResult> readEntry(long entryIndex) {
+        return null;
+    }
 
     /**
      * 将给定的Entry块数据写入集群
@@ -24,11 +30,17 @@ public interface NovaIOClient {
      * @param entryData Entry块数据
      * @return {@link AsyncFuture}
      */
-    AsyncFuture<WriteEntryResult> writeEntry(ByteBuf entryData);
+    @Override
+    public AsyncFuture<WriteEntryResult> writeEntry(ByteBuf entryData) {
+        return null;
+    }
 
     /**
      * 安全且优雅地关闭客户端
      */
-    void close();
+    @Override
+    public void close() {
+
+    }
 
 }
