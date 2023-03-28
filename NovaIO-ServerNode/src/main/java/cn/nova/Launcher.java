@@ -40,9 +40,11 @@ public final class Launcher {
         LocalStorage storage = initEntryStore();
 
         MsgHandler udpHandler = new UDPMsgHandler();
-        UDPService udpService = selectUDPService(netConfig, udpHandler);
         MsgHandler tcpHandler = new TCPMsgHandler();
-        TCPService tcpService = selectTCPService(netConfig, tcpHandler);
+
+        NetworkServiceGroup group = selectNetworkService(netConfig, udpHandler, tcpHandler);
+        UDPService udpService = group.getUdpService();
+        TCPService tcpService = group.getTcpService();
 
         int tickTime = 20;
 

@@ -1,7 +1,7 @@
 package cn.nova.cluster;
 
 /**
- * {@link ClusterInfo}聚合了集群的基本信息
+ * {@link ClusterInfo}是一个中转传递类，聚合了集群的基本信息
  *
  * @author RealDragonking
  */

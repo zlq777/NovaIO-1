@@ -159,51 +159,32 @@ public final class LaunchUtils {
     }
 
     /**
-     * 基于当前运行环境，选择合适的{@link UDPService}
+     * 基于当前运行环境，选择合适的{@link UDPService}和{@link TCPService}
      *
      * @param config {@link NetworkConfig}
-     * @param handler {@link MsgHandler}
-     * @return {@link UDPService}
+     * @param udpHandler 处理udp通信的{@link MsgHandler}
+     * @param tcpHandler 处理tcp通信的{@link MsgHandler}
+     * @return {@link NetworkServiceGroup}
      */
-    public static UDPService selectUDPService(NetworkConfig config, MsgHandler handler) {
-        LOG.info("正在初始化选择UDP服务内核...");
+    public static NetworkServiceGroup selectNetworkService(NetworkConfig config,
+                                                           MsgHandler udpHandler, MsgHandler tcpHandler) {
+        LOG.info("正在初始化选择网络io内核...");
 
         UDPService udpService;
-
-        if (Epoll.isAvailable()) {
-            udpService = new EpollUDPService(config, handler);
-        } else {
-            udpService = new GeneralUDPService(config, handler);
-        }
-
-        LOG.info("检测到基于 " + PlatformDependent.normalizedOs() + "_" + PlatformDependent.normalizedArch() +
-                " 平台运行，使用 " + (Epoll.isAvailable() ? "epoll" : "general") + " UDP服务内核");
-
-        return udpService;
-    }
-
-    /**
-     * 基于当前运行环境，选择合适的{@link TCPService}
-     *
-     * @param config {@link NetworkConfig}
-     * @param handler {@link MsgHandler}
-     * @return {@link TCPService}
-     */
-    public static TCPService selectTCPService(NetworkConfig config, MsgHandler handler) {
-        LOG.info("正在初始化选择TCP服务内核...");
-
         TCPService tcpService;
 
         if (Epoll.isAvailable()) {
-            tcpService = new EpollTCPService(config, handler);
+            udpService = new EpollUDPService(config, udpHandler);
+            tcpService = new EpollTCPService(config, tcpHandler);
         } else {
-            tcpService = new GeneralTCPService(config, handler);
+            udpService = new GeneralUDPService(config, udpHandler);
+            tcpService = new GeneralTCPService(config, tcpHandler);
         }
 
         LOG.info("检测到基于 " + PlatformDependent.normalizedOs() + "_" + PlatformDependent.normalizedArch() +
-                " 平台运行，使用 " + (Epoll.isAvailable() ? "epoll" : "general") + " TCP服务内核");
+                " 平台运行，使用 " + (Epoll.isAvailable() ? "epoll" : "general") + " 网络io内核");
 
-        return tcpService;
+        return new NetworkServiceGroup(udpService, tcpService);
     }
 
     /**
