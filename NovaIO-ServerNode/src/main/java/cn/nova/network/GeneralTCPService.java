@@ -72,7 +72,6 @@ public final class GeneralTCPService implements TCPService {
     public void close() {
         acceptThreadGroup.shutdownGracefully();
         ioThreadGroup.shutdownGracefully();
-        exeThreadGroup.shutdownGracefully();
     }
 
 }
