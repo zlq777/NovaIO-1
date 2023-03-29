@@ -1,16 +1,26 @@
 package cn.client;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.Channel;
+import io.netty.channel.EventLoopGroup;
+
+import java.util.Map;
 
 /**
  * {@link NovaIOClient}的默认实现类
  *
  * @author RealDragonking
  */
-public class NovaIOClientImpl implements NovaIOClient {
+class NovaIOClientImpl implements NovaIOClient {
 
-    public NovaIOClientImpl() {
+    private final Map<Long, AsyncFuture<?>> waiterMap;
+    private final EventLoopGroup ioThreadGroup;
+    private final Channel channel;
 
+    NovaIOClientImpl(EventLoopGroup ioThreadGroup, Channel channel, Map<Long, AsyncFuture<?>> waiterMap) {
+        this.ioThreadGroup = ioThreadGroup;
+        this.channel = channel;
+        this.waiterMap = waiterMap;
     }
 
     /**
@@ -40,7 +50,7 @@ public class NovaIOClientImpl implements NovaIOClient {
      */
     @Override
     public void close() {
-
+        ioThreadGroup.shutdownGracefully();
     }
 
 }
