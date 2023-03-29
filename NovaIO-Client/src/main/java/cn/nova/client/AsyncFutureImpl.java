@@ -1,4 +1,4 @@
-package cn.client;
+package cn.nova.client;
 
 /**
  * {@link AsyncFuture}的默认实现，使用数组作为{@link AsyncFutureListener}的底层存储结构

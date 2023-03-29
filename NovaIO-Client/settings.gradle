@@ -1,3 +1,0 @@
-rootProject.name = 'NovaIO-Client'
-include ':NovaIO-Common'
-project(':NovaIO-Common').projectDir = new File(settingsDir, '../NovaIO-Common')

@@ -1,4 +1,4 @@
-package cn.client;
+package cn.nova.client;
 
 import io.netty.channel.*;
 

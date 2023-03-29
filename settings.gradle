@@ -1,0 +1,4 @@
+rootProject.name = 'NovaIO'
+include ':NovaIO-ServerNode'
+include ':NovaIO-Client'
+include ':NovaIO-Common'
