@@ -1,5 +1,7 @@
 package cn.nova.client;
 
+import cn.nova.client.response.AppendNewEntryResponse;
+import cn.nova.client.response.ReadEntryResponse;
 import io.netty.buffer.ByteBuf;
 
 /**
@@ -16,7 +18,7 @@ public interface NovaIOClient {
      * @param entryIndex Entry序列号
      * @return {@link AsyncFuture}
      */
-    AsyncFuture readEntry(long entryIndex);
+    AsyncFuture<ReadEntryResponse> readEntry(long entryIndex);
 
     /**
      * 将给定的Entry块数据写入集群，将尽最大可能在单次传输中写入更多的字节（上限32kb即32768字节）
@@ -24,7 +26,7 @@ public interface NovaIOClient {
      * @param entryData Entry块数据
      * @return {@link AsyncFuture}
      */
-    AsyncFuture appendNewEntry(ByteBuf entryData);
+    AsyncFuture<AppendNewEntryResponse> appendNewEntry(ByteBuf entryData);
 
     /**
      * 安全且优雅地关闭客户端
