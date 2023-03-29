@@ -6,10 +6,12 @@ import io.netty.buffer.ByteBuf;
  * {@link AsyncFuture}的默认实现，使用数组作为{@link AsyncFutureListener}的底层存储结构
  *
  * @author RealDragonking
+ * @param <T> 响应消息的类型
  */
-public class AsyncFutureImpl implements AsyncFuture {
+public class AsyncFutureImpl<T> implements AsyncFuture<T> {
+
     private volatile int pos;
-    private AsyncFutureListener[] listeners;
+    private AsyncFutureListener<T>[] listeners;
     private ByteBuf result;
 
     public AsyncFutureImpl() {
@@ -23,12 +25,12 @@ public class AsyncFutureImpl implements AsyncFuture {
      * @param listener {@link AsyncFutureListener}
      */
     @Override
-    public void addListener(AsyncFutureListener listener) {
+    public void addListener(AsyncFutureListener<T> listener) {
         synchronized (this) {
             if (result == null) {
                 int len = listeners.length;
                 if (pos == len) {
-                    AsyncFutureListener[] tempBucket = new AsyncFutureListener[len << 1];
+                    AsyncFutureListener<T>[] tempBucket = new AsyncFutureListener[len << 1];
                     System.arraycopy(listeners, 0, tempBucket, 0, len);
                     listeners = tempBucket;
                 }
@@ -48,7 +50,7 @@ public class AsyncFutureImpl implements AsyncFuture {
     public void notifyResponse(ByteBuf result) {
         synchronized (this) {
             this.result = result;
-            for (AsyncFutureListener listener : listeners) {
+            for (AsyncFutureListener<T> listener : listeners) {
                 listener.onNotify(result);
             }
         }

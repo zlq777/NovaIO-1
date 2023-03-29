@@ -1,5 +1,7 @@
 package cn.nova.client;
 
+import cn.nova.client.result.AppendNewEntryResult;
+import cn.nova.client.result.ReadEntryResult;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 
@@ -12,10 +14,12 @@ import java.util.Map;
  */
 public class ResponseMsgHandler extends ChannelInboundHandlerAdapter {
 
-    private final Map<Long, AsyncFuture> futurerMap;
+    private final Map<Long, AsyncFuture<?>> futurerMap;
+    private final Map<Long, Class<?>> futureTypeMap;
 
-    public ResponseMsgHandler(Map<Long, AsyncFuture> futurerMap) {
+    public ResponseMsgHandler(Map<Long, AsyncFuture<?>> futurerMap, Map<Long, Class<?>> futureTypeMap) {
         this.futurerMap = futurerMap;
+        this.futureTypeMap = futureTypeMap;
     }
 
     /**
@@ -30,10 +34,20 @@ public class ResponseMsgHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
         ByteBuf byteBuf = (ByteBuf) msg;
-        long entryIndex = byteBuf.readLong();
-        AsyncFuture future = futurerMap.remove(entryIndex);
-        if (future != null) {
-            future.notifyResponse(byteBuf);
+        long sessionId = byteBuf.readLong();
+
+        AsyncFuture<?> future = futurerMap.remove(sessionId);
+        Class<?> futureType = futureTypeMap.remove(sessionId);
+
+        if (future == null || futureType == null) {
+            byteBuf.release();
+            return;
+        }
+
+        if (futureType == ReadEntryResult.class) {
+
+        } else if (futureType == AppendNewEntryResult.class) {
+
         }
     }
 

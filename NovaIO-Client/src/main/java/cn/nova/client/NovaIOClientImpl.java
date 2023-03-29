@@ -1,5 +1,7 @@
 package cn.nova.client;
 
+import cn.nova.client.result.AppendNewEntryResult;
+import cn.nova.client.result.ReadEntryResult;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
@@ -18,14 +20,18 @@ import static cn.nova.CommonUtils.*;
 class NovaIOClientImpl implements NovaIOClient {
 
     private static final int MAX_BYTE_SIZE = 32768;
-    private final Map<Long, AsyncFuture> futureMap;
+    private final Map<Long, Class<?>> futureTypeMap;
+    private final Map<Long, AsyncFuture<?>> futureMap;
     private final EventLoopGroup ioThreadGroup;
     private final AtomicLong sessionIdCreator;
     private final Channel channel;
 
-    NovaIOClientImpl(EventLoopGroup ioThreadGroup, Channel channel, Map<Long, AsyncFuture> futureMap) {
+    NovaIOClientImpl(EventLoopGroup ioThreadGroup, Channel channel,
+                     Map<Long, AsyncFuture<?>> futureMap,
+                     Map<Long, Class<?>> futureTypeMap) {
         this.sessionIdCreator = new AtomicLong(-1L);
         this.ioThreadGroup = ioThreadGroup;
+        this.futureTypeMap = futureTypeMap;
         this.futureMap = futureMap;
         this.channel = channel;
     }
@@ -37,11 +43,12 @@ class NovaIOClientImpl implements NovaIOClient {
      * @return {@link AsyncFuture}
      */
     @Override
-    public AsyncFuture readEntry(long entryIndex) {
+    public AsyncFuture<ReadEntryResult> readEntry(long entryIndex) {
         long sessionId = sessionIdCreator.incrementAndGet();
-        AsyncFuture future = new AsyncFutureImpl();
+        AsyncFuture<ReadEntryResult> future = new AsyncFutureImpl<>();
 
         futureMap.put(sessionId, future);
+        futureTypeMap.put(sessionId, ReadEntryResult.class);
 
         ByteBuf byteBuf = ByteBufAllocator.DEFAULT.buffer().writerIndex(4);
 
@@ -65,11 +72,12 @@ class NovaIOClientImpl implements NovaIOClient {
      * @return {@link AsyncFuture}
      */
     @Override
-    public AsyncFuture appendNewEntry(ByteBuf entryData) {
+    public AsyncFuture<AppendNewEntryResult> appendNewEntry(ByteBuf entryData) {
         long sessionId = sessionIdCreator.incrementAndGet();
-        AsyncFuture future = new AsyncFutureImpl();
+        AsyncFuture<AppendNewEntryResult> future = new AsyncFutureImpl<>();
 
         futureMap.put(sessionId, future);
+        futureTypeMap.put(sessionId, AppendNewEntryResult.class);
 
         ByteBuf byteBuf = ByteBufAllocator.DEFAULT.buffer().writerIndex(4);
 
