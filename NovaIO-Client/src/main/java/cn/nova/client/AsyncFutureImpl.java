@@ -1,7 +1,5 @@
 package cn.nova.client;
 
-import io.netty.buffer.ByteBuf;
-
 /**
  * {@link AsyncFuture}的默认实现，使用数组作为{@link AsyncFutureListener}的底层存储结构
  *
@@ -12,7 +10,7 @@ public class AsyncFutureImpl<T> implements AsyncFuture<T> {
 
     private volatile int pos;
     private AsyncFutureListener<T>[] listeners;
-    private ByteBuf result;
+    private T result;
 
     public AsyncFutureImpl() {
         this.pos = 0;
@@ -47,7 +45,7 @@ public class AsyncFutureImpl<T> implements AsyncFuture<T> {
      * @param result 执行结果
      */
     @Override
-    public void notifyResponse(ByteBuf result) {
+    public void notifyResponse(T result) {
         synchronized (this) {
             this.result = result;
             for (AsyncFutureListener<T> listener : listeners) {

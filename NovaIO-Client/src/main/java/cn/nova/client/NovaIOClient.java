@@ -1,7 +1,5 @@
 package cn.nova.client;
 
-import cn.nova.client.result.AppendNewEntryResult;
-import cn.nova.client.result.ReadEntryResult;
 import io.netty.buffer.ByteBuf;
 
 /**

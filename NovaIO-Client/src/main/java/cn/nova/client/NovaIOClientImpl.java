@@ -1,7 +1,7 @@
 package cn.nova.client;
 
-import cn.nova.client.result.AppendNewEntryResult;
-import cn.nova.client.result.ReadEntryResult;
+import cn.nova.client.response.AppendNewEntryResponse;
+import cn.nova.client.response.ReadEntryResponse;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
@@ -43,12 +43,12 @@ class NovaIOClientImpl implements NovaIOClient {
      * @return {@link AsyncFuture}
      */
     @Override
-    public AsyncFuture<ReadEntryResult> readEntry(long entryIndex) {
+    public AsyncFuture<ReadEntryResponse> readEntry(long entryIndex) {
         long sessionId = sessionIdCreator.incrementAndGet();
-        AsyncFuture<ReadEntryResult> future = new AsyncFutureImpl<>();
+        AsyncFuture<ReadEntryResponse> future = new AsyncFutureImpl<>();
 
         futureMap.put(sessionId, future);
-        futureTypeMap.put(sessionId, ReadEntryResult.class);
+        futureTypeMap.put(sessionId, ReadEntryResponse.class);
 
         ByteBuf byteBuf = ByteBufAllocator.DEFAULT.buffer().writerIndex(4);
 
@@ -72,12 +72,12 @@ class NovaIOClientImpl implements NovaIOClient {
      * @return {@link AsyncFuture}
      */
     @Override
-    public AsyncFuture<AppendNewEntryResult> appendNewEntry(ByteBuf entryData) {
+    public AsyncFuture<AppendNewEntryResponse> appendNewEntry(ByteBuf entryData) {
         long sessionId = sessionIdCreator.incrementAndGet();
-        AsyncFuture<AppendNewEntryResult> future = new AsyncFutureImpl<>();
+        AsyncFuture<AppendNewEntryResponse> future = new AsyncFutureImpl<>();
 
         futureMap.put(sessionId, future);
-        futureTypeMap.put(sessionId, AppendNewEntryResult.class);
+        futureTypeMap.put(sessionId, AppendNewEntryResponse.class);
 
         ByteBuf byteBuf = ByteBufAllocator.DEFAULT.buffer().writerIndex(4);
 

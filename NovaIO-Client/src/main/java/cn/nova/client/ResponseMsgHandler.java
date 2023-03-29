@@ -1,7 +1,7 @@
 package cn.nova.client;
 
-import cn.nova.client.result.AppendNewEntryResult;
-import cn.nova.client.result.ReadEntryResult;
+import cn.nova.client.response.AppendNewEntryResponse;
+import cn.nova.client.response.ReadEntryResponse;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 
@@ -32,6 +32,7 @@ public class ResponseMsgHandler extends ChannelInboundHandlerAdapter {
      * @param msg 消息
      */
     @Override
+    @SuppressWarnings("unchecked")
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
         ByteBuf byteBuf = (ByteBuf) msg;
         long sessionId = byteBuf.readLong();
@@ -44,10 +45,11 @@ public class ResponseMsgHandler extends ChannelInboundHandlerAdapter {
             return;
         }
 
-        if (futureType == ReadEntryResult.class) {
-
-        } else if (futureType == AppendNewEntryResult.class) {
-
+        if (futureType == ReadEntryResponse.class) {
+            ((AsyncFuture<ReadEntryResponse>)future).notifyResponse(new ReadEntryResponse(byteBuf));
+        } else if (futureType == AppendNewEntryResponse.class) {
+            long entryIndex = byteBuf.readLong();
+            ((AsyncFuture<AppendNewEntryResponse>)future).notifyResponse(new AppendNewEntryResponse(entryIndex));
         }
     }
 
