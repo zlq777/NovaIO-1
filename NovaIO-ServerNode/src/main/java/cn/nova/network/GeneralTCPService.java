@@ -31,9 +31,11 @@ public final class GeneralTCPService implements TCPService {
         this.config = config;
 
         this.acceptThreadGroup = new NioEventLoopGroup(1);
-        this.ioThreadGroup = new NioEventLoopGroup(config.getTCPioThreadNumber(),
+        this.ioThreadGroup = new NioEventLoopGroup(
+                config.getTCPioThreadNumber(),
                 getThreadFactory("tcp-io", true));
-        this.exeThreadGroup = new UnorderedThreadPoolEventExecutor(config.getTCPexecThreadNumber(),
+        this.exeThreadGroup = new UnorderedThreadPoolEventExecutor(
+                config.getTCPexecThreadNumber(),
                 getThreadFactory("tcp-exec", true));
 
         this.bootstrap = new ServerBootstrap()
@@ -57,7 +59,7 @@ public final class GeneralTCPService implements TCPService {
     @Override
     public boolean start() {
         try {
-            bootstrap.bind(config.getTcpBindAddress(), config.getTcpBindPort()).sync();
+            bootstrap.bind(config.getTcpBindHost(), config.getTcpBindPort()).sync();
             return true;
         } catch (Exception e) {
             e.printStackTrace();

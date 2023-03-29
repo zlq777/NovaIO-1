@@ -17,8 +17,8 @@ tcp-io-thread-number = 2
 # 本地TCP服务的业务处理线程数量
 tcp-exe-thread-number = 2
 
-# 本地TCP服务绑定的ip-address
-tcp-bind-ip-address = 127.0.0.1
+# 本地TCP服务绑定的host
+tcp-bind-host = 127.0.0.1
 
 # 本地TCP服务绑定的port端口号
 tcp-bind-port = 4000

@@ -30,9 +30,11 @@ public final class EpollUDPService implements UDPService {
     public EpollUDPService(NetworkConfig config, MsgHandler handler) {
         this.config = config;
 
-        this.ioThreadGroup = new EpollEventLoopGroup(config.getUDPioThreadNumber(),
+        this.ioThreadGroup = new EpollEventLoopGroup(
+                config.getUDPioThreadNumber(),
                 getThreadFactory("udp-io", true));
-        this.exeThreadGroup = new UnorderedThreadPoolEventExecutor(config.getUDPexecThreadNumber(),
+        this.exeThreadGroup = new UnorderedThreadPoolEventExecutor(
+                config.getUDPexecThreadNumber(),
                 getThreadFactory("udp-exec", true));
 
         this.bootstrap = new Bootstrap()

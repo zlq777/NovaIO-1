@@ -6,4 +6,18 @@ package cn.client;
  * @author RealDragonking
  */
 public final class NovaIOClients {
+
+    private NovaIOClients() {}
+
+    /**
+     * 根据给定的host和port，创建连接到目标NovaIO服务节点的{@link NovaIOClient}
+     *
+     * @param host host
+     * @param port port
+     * @return {@link NovaIOClient}
+     */
+    public static NovaIOClient create(String host, int port) {
+        return null;
+    }
+
 }

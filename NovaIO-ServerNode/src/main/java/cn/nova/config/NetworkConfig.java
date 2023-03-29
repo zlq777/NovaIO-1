@@ -12,7 +12,7 @@ public final class NetworkConfig {
     private final int udpListenPort;
     private final int tcp_ioThreadNumber;
     private final int tcp_exeThreadNumber;
-    private final String tcpBindAddress;
+    private final String tcpBindHost;
     private final int tcpBindPort;
 
     public NetworkConfig(SourceConfig srcConfig) {
@@ -22,7 +22,7 @@ public final class NetworkConfig {
 
         this.tcp_ioThreadNumber = srcConfig.getIntValue("tcp-io-thread-number", 1);
         this.tcp_exeThreadNumber = srcConfig.getIntValue("tcp-exe-thread-number", 1);
-        this.tcpBindAddress = srcConfig.getString("tcp-bind-ip-address");
+        this.tcpBindHost = srcConfig.getString("tcp-bind-host");
         this.tcpBindPort = srcConfig.getIntValue("tcp-bind-port", 8081);
     }
 
@@ -72,12 +72,12 @@ public final class NetworkConfig {
     }
 
     /**
-     * 获取到本地TCP服务绑定的ip-address
+     * 获取到本地TCP服务绑定的host
      *
-     * @return 本地TCP服务绑定的ip-address
+     * @return 本地TCP服务绑定的host
      */
-    public String getTcpBindAddress() {
-        return this.tcpBindAddress;
+    public String getTcpBindHost() {
+        return this.tcpBindHost;
     }
 
     /**
