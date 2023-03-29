@@ -1,5 +1,6 @@
 package cn.nova.client;
 
+import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 
 import java.util.Map;
@@ -11,10 +12,10 @@ import java.util.Map;
  */
 public class ResponseMsgHandler extends ChannelInboundHandlerAdapter {
 
-    private final Map<Long, AsyncFuture<?>> waiterMap;
+    private final Map<Long, AsyncFuture> futurerMap;
 
-    public ResponseMsgHandler(Map<Long, AsyncFuture<?>> waiterMap) {
-        this.waiterMap = waiterMap;
+    public ResponseMsgHandler(Map<Long, AsyncFuture> futurerMap) {
+        this.futurerMap = futurerMap;
     }
 
     /**
@@ -28,7 +29,12 @@ public class ResponseMsgHandler extends ChannelInboundHandlerAdapter {
      */
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
-        //
+        ByteBuf byteBuf = (ByteBuf) msg;
+        long entryIndex = byteBuf.readLong();
+        AsyncFuture future = futurerMap.remove(entryIndex);
+        if (future != null) {
+            future.notifyResponse(byteBuf);
+        }
     }
 
     /**

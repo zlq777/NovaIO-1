@@ -1,16 +1,16 @@
 package cn.nova.client;
 
+import io.netty.buffer.ByteBuf;
+
 /**
  * {@link AsyncFuture}的默认实现，使用数组作为{@link AsyncFutureListener}的底层存储结构
  *
  * @author RealDragonking
- * @param <T>
  */
-public class AsyncFutureImpl<T> implements AsyncFuture<T> {
-
-    private volatile T result;
+public class AsyncFutureImpl implements AsyncFuture {
     private volatile int pos;
-    private AsyncFutureListener<T>[] listeners;
+    private AsyncFutureListener[] listeners;
+    private ByteBuf result;
 
     public AsyncFutureImpl() {
         this.pos = 0;
@@ -23,12 +23,12 @@ public class AsyncFutureImpl<T> implements AsyncFuture<T> {
      * @param listener {@link AsyncFutureListener}
      */
     @Override
-    public void addListener(AsyncFutureListener<T> listener) {
+    public void addListener(AsyncFutureListener listener) {
         synchronized (this) {
             if (result == null) {
                 int len = listeners.length;
                 if (pos == len) {
-                    AsyncFutureListener<T>[] tempBucket = new AsyncFutureListener[len << 1];
+                    AsyncFutureListener[] tempBucket = new AsyncFutureListener[len << 1];
                     System.arraycopy(listeners, 0, tempBucket, 0, len);
                     listeners = tempBucket;
                 }
@@ -45,10 +45,10 @@ public class AsyncFutureImpl<T> implements AsyncFuture<T> {
      * @param result 执行结果
      */
     @Override
-    public void notifyResult(T result) {
+    public void notifyResponse(ByteBuf result) {
         synchronized (this) {
             this.result = result;
-            for (AsyncFutureListener<T> listener : listeners) {
+            for (AsyncFutureListener listener : listeners) {
                 listener.onNotify(result);
             }
         }

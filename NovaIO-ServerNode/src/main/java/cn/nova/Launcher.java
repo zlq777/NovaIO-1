@@ -64,7 +64,7 @@ public final class Launcher {
 
         udpHandler.register(new RaftService(stateMachine));
 
-        tcpHandler.register(new ClientService(stateMachine));
+        tcpHandler.register(new ClientService(stateMachine, storage));
 
         onShutdown(() -> {
             udpService.close();

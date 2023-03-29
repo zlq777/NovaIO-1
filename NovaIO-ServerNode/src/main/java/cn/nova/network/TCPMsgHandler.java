@@ -92,9 +92,8 @@ public final class TCPMsgHandler extends MsgHandler {
             }
         } else {
             LOG.error("无效数据，没有找到对应的处理服务");
+            content.release();
         }
-
-        content.release();
     }
 
 }

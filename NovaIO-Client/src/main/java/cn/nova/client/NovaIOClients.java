@@ -31,7 +31,7 @@ public final class NovaIOClients {
      */
     public static NovaIOClient create(String host, int port) throws Exception {
         EventLoopGroup ioThreadGroup = new NioEventLoopGroup(1);
-        Map<Long, AsyncFuture<?>> waiterMap = new ConcurrentHashMap<>();
+        Map<Long, AsyncFuture> futureMap = new ConcurrentHashMap<>();
 
         Bootstrap bootstrap = new Bootstrap()
                 .group(ioThreadGroup)
@@ -41,13 +41,13 @@ public final class NovaIOClients {
                     protected void initChannel(SocketChannel ch) {
                         ChannelPipeline pipeline = ch.pipeline();
                         pipeline.addLast(new LengthFieldBasedFrameDecoder(65536, 0, 4, 0, 4))
-                                .addLast(new ResponseMsgHandler(waiterMap));
+                                .addLast(new ResponseMsgHandler(futureMap));
                     }
                 });
 
         Channel channel = bootstrap.connect(host, port).sync().channel();
 
-        return new NovaIOClientImpl(ioThreadGroup, channel, waiterMap);
+        return new NovaIOClientImpl(ioThreadGroup, channel, futureMap);
     }
 
 }
