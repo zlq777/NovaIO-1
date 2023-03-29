@@ -24,7 +24,7 @@ public interface NovaIOClient {
      * @param entryData Entry块数据
      * @return {@link AsyncFuture}
      */
-    AsyncFuture<WriteEntryResult> writeEntry(ByteBuf entryData);
+    AsyncFuture<WriteEntryResult> appendNewEntry(ByteBuf entryData);
 
     /**
      * 安全且优雅地关闭客户端

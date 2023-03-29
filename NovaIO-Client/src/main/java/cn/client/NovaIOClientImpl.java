@@ -1,10 +1,12 @@
 package cn.client;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoopGroup;
 
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * {@link NovaIOClient}的默认实现类
@@ -15,12 +17,14 @@ class NovaIOClientImpl implements NovaIOClient {
 
     private final Map<Long, AsyncFuture<?>> waiterMap;
     private final EventLoopGroup ioThreadGroup;
+    private final AtomicLong sessionIdCreator;
     private final Channel channel;
 
     NovaIOClientImpl(EventLoopGroup ioThreadGroup, Channel channel, Map<Long, AsyncFuture<?>> waiterMap) {
+        this.sessionIdCreator = new AtomicLong(-1L);
         this.ioThreadGroup = ioThreadGroup;
-        this.channel = channel;
         this.waiterMap = waiterMap;
+        this.channel = channel;
     }
 
     /**
@@ -41,8 +45,16 @@ class NovaIOClientImpl implements NovaIOClient {
      * @return {@link AsyncFuture}
      */
     @Override
-    public AsyncFuture<WriteEntryResult> writeEntry(ByteBuf entryData) {
-        return null;
+    public AsyncFuture<WriteEntryResult> appendNewEntry(ByteBuf entryData) {
+        long sessionId = sessionIdCreator.incrementAndGet();
+        AsyncFuture<WriteEntryResult> future = new AsyncFutureImpl<>();
+
+        waiterMap.put(sessionId, future);
+
+        ByteBuf byteBuf = ByteBufAllocator.DEFAULT.buffer();
+
+
+        return future;
     }
 
     /**

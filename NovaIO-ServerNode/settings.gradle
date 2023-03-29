@@ -1,2 +1,3 @@
 rootProject.name = 'NovaIO-ServerNode'
-
+include ':NovaIO-Common'
+project(':NovaIO-Common').projectDir = new File(settingsDir, '../NovaIO-Common')
