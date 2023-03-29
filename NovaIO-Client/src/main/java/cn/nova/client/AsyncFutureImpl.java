@@ -6,6 +6,7 @@ package cn.nova.client;
  * @author RealDragonking
  * @param <T> 响应消息的类型
  */
+@SuppressWarnings("unchecked")
 public class AsyncFutureImpl<T> implements AsyncFuture<T> {
 
     private volatile int pos;
