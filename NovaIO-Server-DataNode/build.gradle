@@ -1,0 +1,21 @@
+
+group 'cn.nova'
+version '1.0'
+
+jar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes 'Main-Class': 'cn.nova.DataNodeLauncher'
+    }
+    from {
+        (configurations.runtimeClasspath).collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
+}
+
+dependencies {
+    implementation (
+            project(':NovaIO-Server-Common')
+    )
+}

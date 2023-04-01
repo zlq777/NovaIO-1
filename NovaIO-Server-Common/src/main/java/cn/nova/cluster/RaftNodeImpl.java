@@ -248,7 +248,7 @@ public abstract class RaftNodeImpl implements RaftNode {
      */
     private void sendEntrySyncMsg(ClusterNode node) {
         long inSyncEntryIndex = node.inSyncEntryIndex();
-        long mostNewEntryIndex = inSyncEntry == null ? applyEntryIndex : inSyncEntry.entryIndex;
+        long mostNewEntryIndex = (inSyncEntry == null) ? applyEntryIndex : inSyncEntry.entryIndex;
 
         if (inSyncEntryIndex > mostNewEntryIndex) {
             return;
