@@ -1,5 +1,6 @@
 package cn.nova.client;
 
+import cn.nova.async.AsyncFuture;
 import cn.nova.client.response.AppendNewEntryResponse;
 import cn.nova.client.response.ReadEntryResponse;
 import io.netty.buffer.ByteBuf;

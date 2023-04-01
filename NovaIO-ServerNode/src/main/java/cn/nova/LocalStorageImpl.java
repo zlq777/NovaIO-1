@@ -72,7 +72,7 @@ public class LocalStorageImpl implements LocalStorage {
     }
 
     /**
-     * 从硬盘中读取Entry类型的数据，统一为32KB，并写入{@link ByteBuf}字节缓冲区中
+     * 从硬盘中读取Entry类型的数据，上限为32KB，并写入{@link ByteBuf}字节缓冲区中
      *
      * @param entryIndex Entry索引
      * @param byteBuf {@link ByteBuf}

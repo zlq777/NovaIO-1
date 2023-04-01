@@ -1,6 +1,8 @@
 package cn.nova.cluster;
 
 import cn.nova.LocalStorage;
+import cn.nova.async.AsyncFuture;
+import cn.nova.async.AsyncFutureImpl;
 import cn.nova.config.TimeConfig;
 import cn.nova.network.UDPService;
 import io.netty.buffer.ByteBuf;
@@ -12,7 +14,6 @@ import io.netty.util.TimerTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.concurrent.TimeUnit;
@@ -22,19 +23,18 @@ import java.util.concurrent.locks.ReentrantLock;
 import static cn.nova.CommonUtils.*;
 
 /**
- * {@link RaftStateMachine}的默认实现
+ * {@link RaftNode}的默认实现
  *
  * @author RealDragonking
  */
-public final class RaftStateMachineImpl implements RaftStateMachine {
+public abstract class RaftNodeImpl implements RaftNode {
 
-    private static final Logger LOG = LogManager.getLogger(RaftStateMachine.class);
-
-    private final Queue<EntrySyncTask> taskQueue;
+    private static final Logger LOG = LogManager.getLogger(RaftNode.class);
+    private final Queue<InSyncEntry> waitEntryQueue;
     private final ClusterNode[] otherNodes;
     private final ByteBufAllocator alloc;
-    private final LocalStorage storage;
     private final UDPService udpService;
+    private final LocalStorage storage;
     private final Timer timer;
     private final Lock locker;
 
@@ -95,32 +95,39 @@ public final class RaftStateMachineImpl implements RaftStateMachine {
      */
     private volatile long currentTerm;
     /**
-     * 已同步Entry序列号，syncedEntryIndex仅仅代表着完成了同步、写入了当前节点的Entry，不代表
-     * 此Entry已经成功写入了集群大多数
+     * 已经完成了集群大多数写入、已应用Entry序列号。每个节点的applyIndex可能会不一样
      */
-    private volatile long syncedEntryIndex;
-    /**
-     * 已经完成了集群大多数写入、已应用Entry序列号
-     */
-    private volatile long appliedEntryIndex;
+    private volatile long applyEntryIndex;
     /**
      * 当前节点针对{@link #currentTerm}是否已经进行过投票
      */
     private volatile boolean hasVote;
-    private volatile EntrySyncTask inSyncTask;
+    /**
+     * inSyncEntry在不同状态下有不同的含义：
+     * <ul>
+     *     <li>
+     *         leader状态下，表示正在全局同步的全局最新Entry，来源于客户端的写入任务。{@link InSyncEntry#asyncFuture}不为空，需要在
+     *         集群大多数确认后执行回调通知
+     *     </li>
+     *     <li>
+     *         follower状态下，表示针对性同步的局部最新Entry，来源于leader节点的主动同步复制。{@link InSyncEntry#asyncFuture}为空
+     *     </li>
+     * </ul>
+     */
+    private volatile InSyncEntry inSyncEntry;
     private volatile ClusterNode leader;
     private volatile RaftState state;
 
-    public RaftStateMachineImpl(ClusterInfo clusterInfo,
-                                ByteBufAllocator alloc,
-                                TimeConfig timeConfig,
-                                UDPService udpService,
-                                LocalStorage storage,
-                                Timer timer,
-                                int tickTime) {
+    public RaftNodeImpl(ClusterInfo clusterInfo,
+                        ByteBufAllocator alloc,
+                        TimeConfig timeConfig,
+                        UDPService udpService,
+                        LocalStorage storage,
+                        Timer timer,
+                        int tickTime) {
 
         this.otherNodes = clusterInfo.getOtherNodes();
-        this.taskQueue = new ArrayDeque<>();
+        this.waitEntryQueue = new ArrayDeque<>();
         this.locker = new ReentrantLock();
         this.udpService = udpService;
         this.storage = storage;
@@ -134,15 +141,14 @@ public final class RaftStateMachineImpl implements RaftStateMachine {
         this.sendMsgIntervalTicks = timeConfig.getSendMsgInterval() / tickTime;
 
         this.currentTerm = storage.readLong("term", -1L);
-        this.syncedEntryIndex = storage.readLong("synced-entry-index", -1L);
-        this.appliedEntryIndex = storage.readLong("applied-entry-index", -1L);
+        this.applyEntryIndex = storage.readLong("apply-entry-index", -1L);
 
         this.waitTicks = resetWaitTicks = randomElectTicks();
         this.state = RaftState.FOLLOWER;
     }
 
     /**
-     * 启动此{@link RaftStateMachine}
+     * 启动此{@link RaftNode}
      */
     @Override
     public void start() {
@@ -215,23 +221,13 @@ public final class RaftStateMachineImpl implements RaftStateMachine {
     }
 
     /**
-     * 修改并持久化新的已同步Entry序列号
-     *
-     * @param newIndex 新的已同步Entry序列号
-     */
-    private void changeSyncedEntryIndex(long newIndex) {
-        syncedEntryIndex = newIndex;
-        storage.writeLong("synced-entry-index", newIndex);
-    }
-
-    /**
      * 修改并持久化新的已应用Entry序列号
      *
      * @param newIndex 新的已应用Entry序列号
      */
-    private void changeAppliedEntryIndex(long newIndex) {
-        appliedEntryIndex = newIndex;
-        storage.writeLong("applied-entry-index", newIndex);
+    private void changeApplyEntryIndex(long newIndex) {
+        applyEntryIndex = newIndex;
+        storage.writeLong("apply-entry-index", newIndex);
     }
 
     /**
@@ -252,18 +248,30 @@ public final class RaftStateMachineImpl implements RaftStateMachine {
      */
     private void sendEntrySyncMsg(ClusterNode node) {
         long inSyncEntryIndex = node.inSyncEntryIndex();
+        long mostNewEntryIndex = inSyncEntry == null ? applyEntryIndex : inSyncEntry.entryIndex;
 
-        if (inSyncEntryIndex <= syncedEntryIndex) {
-            ByteBuf content = alloc.buffer();
-            DatagramPacket packet = new DatagramPacket(content, node.address());
-
-            writePath(content, "/msg/entry-sync");
-            content.writeLong(inSyncEntryIndex);
-
-            storage.readEntry(inSyncEntryIndex, content);
-
-            udpService.send(packet);
+        if (inSyncEntryIndex > mostNewEntryIndex) {
+            return;
         }
+
+        ByteBuf content = alloc.buffer();
+        DatagramPacket packet = new DatagramPacket(content, node.address());
+
+        writePath(content, "/msg/entry-sync");
+        content.writeLong(inSyncEntryIndex);
+
+        if (inSyncEntryIndex == mostNewEntryIndex && inSyncEntry != null) {
+
+            ByteBuf entryData = inSyncEntry.entryData;
+
+            entryData.markReaderIndex();
+            content.writeBytes(entryData);
+            entryData.resetReaderIndex();
+        } else {
+            storage.readEntry(inSyncEntryIndex, content);
+        }
+
+        udpService.send(packet);
     }
 
     /**
@@ -285,7 +293,7 @@ public final class RaftStateMachineImpl implements RaftStateMachine {
         DatagramPacket packet = new DatagramPacket(content, node.address());
 
         writePath(content, "/msg/heartbeat");
-        content.writeInt(index).writeLong(currentTerm).writeLong(node.applicableEntryIndex());
+        content.writeInt(index).writeLong(currentTerm).writeLong(node.inSyncEntryIndex());
 
         udpService.send(packet);
     }
@@ -299,7 +307,7 @@ public final class RaftStateMachineImpl implements RaftStateMachine {
             DatagramPacket packet = new DatagramPacket(content, node.address());
 
             writePath(content, "/vote/request");
-            content.writeInt(index).writeLong(currentTerm).writeLong(syncedEntryIndex);
+            content.writeInt(index).writeLong(currentTerm).writeLong(applyEntryIndex);
 
             udpService.send(packet);
         }
@@ -312,10 +320,10 @@ public final class RaftStateMachineImpl implements RaftStateMachine {
      *
      * @param candidateIndex   candidate节点的序列号
      * @param candidateTerm    candidate节点竞选的任期
-     * @param syncedEntryIndex 已经完成同步写入的最后一条Entry的序列号
+     * @param applyEntryIndex candidate节点的已应用Entry序列号
      */
     @Override
-    public void receiveVoteRequest(int candidateIndex, long candidateTerm, long syncedEntryIndex) {
+    public void receiveVoteRequest(int candidateIndex, long candidateTerm, long applyEntryIndex) {
         ClusterNode node = getNode(candidateIndex);
         ByteBuf content = alloc.buffer();
         DatagramPacket packet = new DatagramPacket(content, node.address());
@@ -325,7 +333,7 @@ public final class RaftStateMachineImpl implements RaftStateMachine {
 
         locker.lock();
 
-        if (receiveVoteRequest0(candidateTerm, syncedEntryIndex)) {
+        if (receiveVoteRequest0(candidateTerm, applyEntryIndex)) {
             if (candidateTerm > currentTerm) {
                 changeTerm(candidateTerm);
             }
@@ -337,7 +345,6 @@ public final class RaftStateMachineImpl implements RaftStateMachine {
         waitTicks = resetWaitTicks;
 
         locker.unlock();
-
         udpService.send(packet);
     }
 
@@ -345,11 +352,11 @@ public final class RaftStateMachineImpl implements RaftStateMachine {
      * 具体处理来自其它节点的选票获取请求
      *
      * @param candidateTerm  candidate节点竞选的任期
-     * @param syncedEntryIndex 已经完成同步写入的最后一条Entry的序列号
+     * @param applyEntryIndex candidate节点的已应用Entry序列号
      * @return 是否可以给予选票
      */
-    private boolean receiveVoteRequest0(long candidateTerm, long syncedEntryIndex) {
-        if (candidateTerm < currentTerm || syncedEntryIndex < this.syncedEntryIndex) {
+    private boolean receiveVoteRequest0(long candidateTerm, long applyEntryIndex) {
+        if (candidateTerm < currentTerm || applyEntryIndex < this.applyEntryIndex) {
             return false;
         }
 
@@ -421,25 +428,26 @@ public final class RaftStateMachineImpl implements RaftStateMachine {
     /**
      * 处理来自Leader节点的心跳控制消息
      *
-     * @param leaderIndex          leader节点的序列号
-     * @param leaderTerm           leader节点的任期
-     * @param applicableEntryIndex 可应用的Entry序列号
+     * @param leaderIndex leader节点的序列号
+     * @param leaderTerm leader节点的任期
+     * @param inSyncEntryIndex leader节点正在向本节点同步的Entry序列号
      */
     @Override
-    public void receiveHeartbeatMsg(int leaderIndex, long leaderTerm, long applicableEntryIndex) {
+    public void receiveHeartbeatMsg(int leaderIndex, long leaderTerm, long inSyncEntryIndex) {
         locker.lock();
         receiveLeaderMsg(leaderIndex, leaderTerm);
-        if (applicableEntryIndex > appliedEntryIndex) {
-            changeAppliedEntryIndex(applicableEntryIndex);
+
+        if (inSyncEntryIndex > applyEntryIndex && inSyncEntry != null) {
+            changeApplyEntryIndex(inSyncEntryIndex);
         }
-        locker.unlock();
 
         ByteBuf content = alloc.buffer();
         DatagramPacket packet = new DatagramPacket(content, leader.address());
 
         writePath(content, "/msg/heartbeat/response");
-        content.writeInt(index).writeLong(appliedEntryIndex);
+        content.writeInt(index).writeLong(applyEntryIndex);
 
+        locker.unlock();
         udpService.send(packet);
     }
 
@@ -455,18 +463,25 @@ public final class RaftStateMachineImpl implements RaftStateMachine {
     public void receiveEntrySyncMsg(int leaderIndex, long leaderTerm, long entryIndex, ByteBuf entryData) {
         locker.lock();
         receiveLeaderMsg(leaderIndex, leaderTerm);
-        if (entryIndex > syncedEntryIndex) {
-            storage.writeEntry(entryIndex, entryData);
-            changeSyncedEntryIndex(entryIndex);
+
+        if (entryIndex > applyEntryIndex) {
+            InSyncEntry inSyncEntry = this.inSyncEntry;
+
+            if (inSyncEntry != null) {
+                changeApplyEntryIndex(inSyncEntry.entryIndex);
+                applyEntry(applyEntryIndex, inSyncEntry.entryData);
+            }
+
+            this.inSyncEntry = new InSyncEntry(entryIndex, entryData, null);
         }
-        locker.unlock();
 
         ByteBuf content = alloc.buffer();
         DatagramPacket packet = new DatagramPacket(content, leader.address());
 
         writePath(content, "/msg/entry-sync/response");
-        content.writeInt(index).writeLong(syncedEntryIndex);
+        content.writeInt(index).writeLong(applyEntryIndex);
 
+        locker.unlock();
         udpService.send(packet);
     }
 
@@ -491,16 +506,17 @@ public final class RaftStateMachineImpl implements RaftStateMachine {
      * 处理来自其他节点的心跳控制响应消息
      *
      * @param nodeIndex         响应节点的序列号
-     * @param appliedEntryIndex 响应节点的已应用Entry序列号
+     * @param applyEntryIndex 响应节点的已应用Entry序列号
      */
     @Override
-    public void receiveHeartbeatResponse(int nodeIndex, long appliedEntryIndex) {
+    public void receiveHeartbeatResponse(int nodeIndex, long applyEntryIndex) {
         locker.lock();
         if (state == RaftState.LEADER) {
+
             ClusterNode node = getNode(nodeIndex);
+
             if (! node.hasChecked()) {
-                node.setInSyncEntryIndex(appliedEntryIndex + 1);
-                node.setApplicableEntryIndex(appliedEntryIndex);
+                node.setInSyncEntryIndex(applyEntryIndex + 1);
             }
         }
         locker.unlock();
@@ -518,28 +534,27 @@ public final class RaftStateMachineImpl implements RaftStateMachine {
         if (state == RaftState.LEADER) {
 
             ClusterNode node = getNode(nodeIndex);
-            EntrySyncTask task = inSyncTask;
+            InSyncEntry inSyncEntry = this.inSyncEntry;
 
-            if (syncedEntryIndex == this.syncedEntryIndex) {
+            if (inSyncEntry != null && syncedEntryIndex == inSyncEntry.entryIndex) {
                 if (++ syncedNodeNumber == majority) {
 
-                    changeAppliedEntryIndex(syncedEntryIndex);
-                    changeSyncedEntryIndex(syncedEntryIndex + 1);
+                    changeApplyEntryIndex(syncedEntryIndex);
+                    applyEntry(syncedEntryIndex, inSyncEntry.entryData);
 
-                    if (task != null) {
-                        task.onSyncFinish(syncedEntryIndex);
-                        task = inSyncTask = taskQueue.poll();
-                        if (task != null) {
-                            syncedNodeNumber = 1;
-                            storage.writeEntry(syncedEntryIndex, task.entryData());
-                        }
+                    inSyncEntry.asyncFuture.notifyResponse(syncedEntryIndex);
+
+                    if ((inSyncEntry = waitEntryQueue.poll()) != null) {
+                        inSyncEntry.entryIndex = applyEntryIndex + 1;
+
+                        syncedNodeNumber = 1;
+                        this.inSyncEntry = inSyncEntry;
                     }
                 }
             }
 
             if (syncedEntryIndex == node.inSyncEntryIndex()) {
                 node.setInSyncEntryIndex(syncedEntryIndex + 1);
-                node.setApplicableEntryIndex(syncedEntryIndex);
                 sendEntrySyncMsg(node);
             }
         }
@@ -547,35 +562,48 @@ public final class RaftStateMachineImpl implements RaftStateMachine {
     }
 
     /**
-     * 提交{@link EntrySyncTask}，任务执行结果会异步的返回。这个任务只能由leader节点执行，非leader节点会立即返回
-     * 同步失败的结果。如果{@link EntrySyncTask}携带的{@link ByteBuffer}被成功写入到raft集群的大多数，那么任务结果会成功返回
+     * 作为leader节点，把数据同步写入集群大多数节点
      *
-     * @param task {@link EntrySyncTask}
+     * @param entryData 准备进行集群大多数确认的新Entry数据
+     * @return 异步返回写入数据的EntryIndex，为-1时表示写入同步失败
      */
     @Override
-    public void submitEntrySyncTask(EntrySyncTask task) {
+    public AsyncFuture<Long> onLeaderAppendEntry(ByteBuf entryData) {
+        AsyncFuture<Long> asyncFuture = new AsyncFutureImpl<>();
+        InSyncEntry newEntry = new InSyncEntry(-1L, entryData, asyncFuture);
+
         locker.lock();
+
         if (state == RaftState.LEADER) {
+            if (inSyncEntry == null) {
+                newEntry.entryIndex = applyEntryIndex + 1;
 
-            if (inSyncTask == null) {
-
-                long entryIndex = syncedEntryIndex + 1;
-
-                inSyncTask = task;
                 syncedNodeNumber = 1;
-                storage.writeEntry(entryIndex, task.entryData());
-
-                changeSyncedEntryIndex(entryIndex);
-                sendEntrySyncMsg();
-
+                inSyncEntry = newEntry;
             } else {
-                taskQueue.add(task);
+                waitEntryQueue.offer(newEntry);
             }
-
-            locker.unlock();
         } else {
-            locker.unlock();
-            task.onSyncFinish(-1L);
+            asyncFuture.notifyResponse(-1L);
+        }
+
+        locker.unlock();
+        return asyncFuture;
+    }
+
+    /**
+     * {@link InSyncEntry}是正在进行同步、等待被确认应用的Entry
+     *
+     * @author RealDragonking
+     */
+    private static class InSyncEntry {
+        private volatile long entryIndex;
+        private final ByteBuf entryData;
+        private final AsyncFuture<Long> asyncFuture;
+        private InSyncEntry(long entryIndex, ByteBuf entryData, AsyncFuture<Long> asyncFuture) {
+            this.entryIndex = entryIndex;
+            this.entryData = entryData;
+            this.asyncFuture = asyncFuture;
         }
     }
 

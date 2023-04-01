@@ -1,6 +1,6 @@
 package cn.nova.service;
 
-import cn.nova.cluster.RaftStateMachine;
+import cn.nova.cluster.RaftNode;
 import cn.nova.network.PathMapping;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.socket.DatagramPacket;
@@ -12,14 +12,14 @@ import io.netty.channel.socket.DatagramPacket;
  */
 public final class RaftService {
 
-    private final RaftStateMachine stateMachine;
+    private final RaftNode stateMachine;
 
-    public RaftService(RaftStateMachine stateMachine) {
+    public RaftService(RaftNode stateMachine) {
         this.stateMachine = stateMachine;
     }
 
     /**
-     * 对应于{@link RaftStateMachine#receiveVoteRequest(int, long, long)}
+     * 对应于{@link RaftNode#receiveVoteRequest(int, long, long)}
      *
      * @param packet {@link DatagramPacket}数据包
      */
@@ -31,10 +31,11 @@ public final class RaftService {
         long syncedEntryIndex = content.readLong();
 
         stateMachine.receiveVoteRequest(candidateIndex, candidateTerm, syncedEntryIndex);
+        packet.release();
     }
 
     /**
-     * 对应于{@link RaftStateMachine#receiveVoteResponse(long, boolean)}
+     * 对应于{@link RaftNode#receiveVoteResponse(long, boolean)}
      *
      * @param packet {@link DatagramPacket}数据包
      */
@@ -45,10 +46,11 @@ public final class RaftService {
         boolean isSuccess = content.readBoolean();
 
         stateMachine.receiveVoteResponse(voteTerm, isSuccess);
+        packet.release();
     }
 
     /**
-     * 对应于{@link RaftStateMachine#receiveHeartbeatMsg(int, long, long)}
+     * 对应于{@link RaftNode#receiveHeartbeatMsg(int, long, long)}
      *
      * @param packet {@link DatagramPacket}数据包
      */
@@ -60,10 +62,11 @@ public final class RaftService {
         long applicableEntryIndex = content.readLong();
 
         stateMachine.receiveHeartbeatMsg(leaderIndex, leaderTerm, applicableEntryIndex);
+        packet.release();
     }
 
     /**
-     * 对应于{@link RaftStateMachine#receiveHeartbeatResponse(int, long)}
+     * 对应于{@link RaftNode#receiveHeartbeatResponse(int, long)}
      *
      * @param packet {@link DatagramPacket}数据包
      */
@@ -74,10 +77,11 @@ public final class RaftService {
         long appliedEntryIndex = content.readLong();
 
         stateMachine.receiveHeartbeatResponse(nodeIndex, appliedEntryIndex);
+        packet.release();
     }
 
     /**
-     * 对应于{@link RaftStateMachine#receiveEntrySyncMsg(int, long, long, ByteBuf)}
+     * 对应于{@link RaftNode#receiveEntrySyncMsg(int, long, long, ByteBuf)}
      *
      * @param packet {@link DatagramPacket}数据包
      */
@@ -92,7 +96,7 @@ public final class RaftService {
     }
 
     /**
-     * 对应于{@link RaftStateMachine#receiveEntrySyncResponse(int, long)}
+     * 对应于{@link RaftNode#receiveEntrySyncResponse(int, long)}
      *
      * @param packet {@link DatagramPacket}数据包
      */
@@ -103,6 +107,7 @@ public final class RaftService {
         long syncedEntryIndex = content.readLong();
 
         stateMachine.receiveEntrySyncResponse(nodeIndex, syncedEntryIndex);
+        packet.release();
     }
 
 }

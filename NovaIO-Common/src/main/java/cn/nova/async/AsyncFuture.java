@@ -1,4 +1,4 @@
-package cn.nova.client;
+package cn.nova.async;
 
 /**
  * {@link AsyncFuture}定义了NovaIO服务节点计算执行的异步返回结果，可以通过添加{@link AsyncFutureListener}的方式挂载回调函数

@@ -1,13 +1,12 @@
 package cn.nova;
 
 import cn.nova.cluster.ClusterInfo;
-import cn.nova.cluster.RaftStateMachine;
-import cn.nova.cluster.RaftStateMachineImpl;
+import cn.nova.cluster.RaftNode;
+import cn.nova.cluster.RaftNodeImpl;
 import cn.nova.config.SourceConfig;
 import cn.nova.config.NetworkConfig;
 import cn.nova.config.TimeConfig;
 import cn.nova.network.*;
-import cn.nova.service.ClientService;
 import cn.nova.service.RaftService;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.util.HashedWheelTimer;
@@ -52,30 +51,28 @@ public final class Launcher {
                 getThreadFactory("timer", false),
                 tickTime,
                 TimeUnit.MILLISECONDS);
-
-        RaftStateMachine stateMachine = new RaftStateMachineImpl(
-                clusterInfo,
-                ByteBufAllocator.DEFAULT,
-                timeConfig,
-                udpService,
-                storage,
-                timer,
-                tickTime);
-
-        udpHandler.register(new RaftService(stateMachine));
-
-        tcpHandler.register(new ClientService(stateMachine, storage));
-
-        onShutdown(() -> {
-            udpService.close();
-            tcpService.close();
-            storage.close();
-            timer.stop();
-        });
-
-        startUDPService(udpService);
-        stateMachine.start();
-        startTCPService(tcpService);
+//
+//        RaftNode stateMachine = new RaftNodeImpl(
+//                clusterInfo,
+//                ByteBufAllocator.DEFAULT,
+//                timeConfig,
+//                udpService,
+//                storage,
+//                timer,
+//                tickTime);
+//
+//        udpHandler.register(new RaftService(stateMachine));
+//
+//        onShutdown(() -> {
+//            udpService.close();
+//            tcpService.close();
+//            storage.close();
+//            timer.stop();
+//        });
+//
+//        startUDPService(udpService);
+//        stateMachine.start();
+//        startTCPService(tcpService);
     }
 
 }

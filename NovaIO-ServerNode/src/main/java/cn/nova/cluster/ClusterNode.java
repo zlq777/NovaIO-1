@@ -56,15 +56,6 @@ public final class ClusterNode {
     }
 
     /**
-     * 设置此节点的可应用Entry序列号
-     *
-     * @param entryIndex 此节点的可应用Entry序列号
-     */
-    public void setApplicableEntryIndex(long entryIndex) {
-        this.applicableEntryIndex = entryIndex;
-    }
-
-    /**
      * 获取到此{@link ClusterNode}是否已经经过Entry一致性检测
      *
      * @return 是否已经经过Entry一致性检测
