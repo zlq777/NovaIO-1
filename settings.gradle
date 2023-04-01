@@ -1,4 +1,6 @@
 rootProject.name = 'NovaIO'
-include ':NovaIO-ServerNode'
+include ':NovaIO-Server-Common'
+include ':NovaIO-Server-DataNode'
+include ':NovaIO-Server-NameNode'
 include ':NovaIO-Client'
 include ':NovaIO-Common'
