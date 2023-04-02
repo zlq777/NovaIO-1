@@ -1,95 +1,60 @@
 package cn.nova.client;
 
 import cn.nova.async.AsyncFuture;
-import cn.nova.async.AsyncFutureImpl;
 import cn.nova.client.response.AppendNewEntryResponse;
 import cn.nova.client.response.ReadEntryResponse;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoopGroup;
+import io.netty.util.Timer;
 
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
-
-import static cn.nova.CommonUtils.*;
 
 /**
  * {@link NovaIOClient}的默认实现类
  *
  * @author RealDragonking
  */
-class NovaIOClientImpl implements NovaIOClient {
+final class NovaIOClientImpl implements NovaIOClient {
 
-    private static final int MAX_BYTE_SIZE = 32768;
     private final Map<Long, AsyncFuture<?>> futureBindMap;
     private final EventLoopGroup ioThreadGroup;
-    private final AtomicLong sessionIdCreator;
-    private final Channel channel;
+    private final Channel[] viewNodeChannels;
+    private final Timer connector;
+    private final int timeout;
+    private Channel leaderChannel;
 
-    NovaIOClientImpl(EventLoopGroup ioThreadGroup, Channel channel,
-                     Map<Long, AsyncFuture<?>> futureBindMap) {
-        this.sessionIdCreator = new AtomicLong(-1L);
-        this.ioThreadGroup = ioThreadGroup;
+    NovaIOClientImpl(EventLoopGroup ioThreadGroup, Timer connector,
+                     Map<Long, AsyncFuture<?>> futureBindMap,
+                     Channel[] viewNodeChannels,
+                     int timeout) {
+        this.viewNodeChannels = viewNodeChannels;
         this.futureBindMap = futureBindMap;
-        this.channel = channel;
+        this.ioThreadGroup = ioThreadGroup;
+        this.connector = connector;
+        this.timeout = timeout;
     }
 
     /**
-     * 根据给定的Entry序列号，从集群中读取对应的Entry块数据
+     * 根据给定的Entry序列号，从所有集群中读取对应的Entry块数据
      *
      * @param entryIndex Entry序列号
      * @return {@link AsyncFuture}
      */
     @Override
     public AsyncFuture<ReadEntryResponse> readEntry(long entryIndex) {
-        long sessionId = sessionIdCreator.incrementAndGet();
-        AsyncFuture<ReadEntryResponse> future = new AsyncFutureImpl<>(ReadEntryResponse.class);
-
-        futureBindMap.put(sessionId, future);
-
-        ByteBuf byteBuf = ByteBufAllocator.DEFAULT.buffer().writerIndex(4);
-
-        writePath(byteBuf, "/read-entry");
-        byteBuf.writeLong(sessionId);
-
-        byteBuf.writeLong(entryIndex);
-
-        int writeIndex = byteBuf.writerIndex();
-        byteBuf.writerIndex(0).writeInt(writeIndex - 4).writerIndex(writeIndex);
-
-        channel.writeAndFlush(byteBuf);
-
-        return future;
+        return null;
     }
 
     /**
-     * 将给定的Entry块数据写入集群，将尽最大可能在单次传输中写入更多的字节（上限32kb即32768字节）
+     * 将给定的Entry块数据写入所有集群，将尽最大可能在单次传输中写入更多的字节（上限32kb即32768字节）
      *
      * @param entryData Entry块数据
      * @return {@link AsyncFuture}
      */
     @Override
     public AsyncFuture<AppendNewEntryResponse> appendNewEntry(ByteBuf entryData) {
-        long sessionId = sessionIdCreator.incrementAndGet();
-        AsyncFuture<AppendNewEntryResponse> future = new AsyncFutureImpl<>(AppendNewEntryResponse.class);
-
-        futureBindMap.put(sessionId, future);
-
-        ByteBuf byteBuf = ByteBufAllocator.DEFAULT.buffer().writerIndex(4);
-
-        writePath(byteBuf, "/append-new-entry");
-        byteBuf.writeLong(sessionId);
-
-        int byteSize = Math.min(entryData.readableBytes(), MAX_BYTE_SIZE);
-        byteBuf.writeBytes(entryData, byteSize);
-
-        int writeIndex = byteBuf.writerIndex();
-        byteBuf.writerIndex(0).writeInt(writeIndex - 4).writerIndex(writeIndex);
-
-        channel.writeAndFlush(byteBuf);
-
-        return future;
+        return null;
     }
 
     /**
@@ -98,6 +63,7 @@ class NovaIOClientImpl implements NovaIOClient {
     @Override
     public void close() {
         ioThreadGroup.shutdownGracefully();
+        connector.stop();
     }
 
 }

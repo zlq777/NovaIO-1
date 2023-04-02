@@ -10,9 +10,11 @@ import cn.nova.cluster.RaftCore;
 public final class ClientService {
 
     private final RaftCore raftCore;
+    private final LocalStorage storage;
 
-    public ClientService(RaftCore raftCore) {
+    public ClientService(RaftCore raftCore, LocalStorage storage) {
         this.raftCore = raftCore;
+        this.storage = storage;
     }
 
 }

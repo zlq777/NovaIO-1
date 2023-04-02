@@ -18,11 +18,11 @@ import static cn.nova.CommonUtils.getThreadFactory;
 import static cn.nova.LaunchUtils.*;
 
 /**
- * DataNode节点的启动类
+ * ViewNode节点的启动类
  *
  * @author RealDragonking
  */
-public final class NameNodeLauncher {
+public final class ViewNodeLauncher {
 
     public static void main(String[] args) {
         ResourceLeakDetector.setLevel(Level.PARANOID);
@@ -50,7 +50,7 @@ public final class NameNodeLauncher {
                 tickTime,
                 TimeUnit.MILLISECONDS);
 
-        RaftCore raftCore = new NameNodeRaftCore(
+        RaftCore raftCore = new ViewNodeRaftCore(
                 clusterInfo,
                 ByteBufAllocator.DEFAULT,
                 timeConfig,
@@ -61,7 +61,7 @@ public final class NameNodeLauncher {
 
         udpHandler.register(new RaftService(raftCore));
 
-        tcpHandler.register(new ClientService(raftCore));
+        tcpHandler.register(new ClientService(raftCore, storage));
 
         onShutdown(() -> {
             udpService.close();

@@ -9,13 +9,13 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.util.Timer;
 
 /**
- * {@link NameNodeRaftCore}给出了NameNode节点的EntryData应用逻辑
+ * {@link ViewNodeRaftCore}给出了ViewNode节点的EntryData应用逻辑
  *
  * @author RealDragonking
  */
-public class NameNodeRaftCore extends AbstractRaftCore {
+public class ViewNodeRaftCore extends AbstractRaftCore {
 
-    public NameNodeRaftCore(ClusterInfo clusterInfo,
+    public ViewNodeRaftCore(ClusterInfo clusterInfo,
                             ByteBufAllocator alloc,
                             TimeConfig timeConfig,
                             UDPService udpService,
