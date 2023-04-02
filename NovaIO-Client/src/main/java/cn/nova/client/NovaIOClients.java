@@ -1,6 +1,6 @@
 package cn.nova.client;
 
-import cn.nova.client.response.ResponseBinder;
+import cn.nova.async.AsyncFuture;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
@@ -32,7 +32,7 @@ public final class NovaIOClients {
      */
     public static NovaIOClient create(String host, int port) throws Exception {
         EventLoopGroup ioThreadGroup = new NioEventLoopGroup(1);
-        Map<Long, ResponseBinder> responseBindMap = new ConcurrentHashMap<>();
+        Map<Long, AsyncFuture<?>> futureBindMap = new ConcurrentHashMap<>();
 
         Bootstrap bootstrap = new Bootstrap()
                 .group(ioThreadGroup)
@@ -42,13 +42,13 @@ public final class NovaIOClients {
                     protected void initChannel(SocketChannel ch) {
                         ChannelPipeline pipeline = ch.pipeline();
                         pipeline.addLast(new LengthFieldBasedFrameDecoder(65536, 0, 4, 0, 4))
-                                .addLast(new ResponseMsgHandler(responseBindMap));
+                                .addLast(new ResponseMsgHandler(futureBindMap));
                     }
                 });
 
         Channel channel = bootstrap.connect(host, port).sync().channel();
 
-        return new NovaIOClientImpl(ioThreadGroup, channel, responseBindMap);
+        return new NovaIOClientImpl(ioThreadGroup, channel, futureBindMap);
     }
 
 }

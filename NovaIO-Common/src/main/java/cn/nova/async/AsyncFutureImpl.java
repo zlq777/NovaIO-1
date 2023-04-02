@@ -9,13 +9,26 @@ package cn.nova.async;
 @SuppressWarnings("unchecked")
 public class AsyncFutureImpl<T> implements AsyncFuture<T> {
 
-    private volatile int pos;
+    private final Class<T> resultType;
     private AsyncFutureListener<T>[] listeners;
+    private volatile int pos;
     private T result;
 
-    public AsyncFutureImpl() {
+    public AsyncFutureImpl(Class<T> resultType) {
+        this.resultType = resultType;
+
         this.pos = 0;
         this.listeners = new AsyncFutureListener[1];
+    }
+
+    /**
+     * 获取到返回结果的类型
+     *
+     * @return {@link Class}
+     */
+    @Override
+    public Class<T> getResultType() {
+        return this.resultType;
     }
 
     /**
@@ -46,7 +59,7 @@ public class AsyncFutureImpl<T> implements AsyncFuture<T> {
      * @param result 执行结果
      */
     @Override
-    public void notifyResponse(T result) {
+    public void notifyResult(T result) {
         synchronized (this) {
             this.result = result;
             for (AsyncFutureListener<T> listener : listeners) {

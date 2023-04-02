@@ -9,6 +9,13 @@ package cn.nova.async;
 public interface AsyncFuture<T> {
 
     /**
+     * 获取到返回结果的类型
+     *
+     * @return {@link Class}
+     */
+    Class<T> getResultType();
+
+    /**
      * 新增一个{@link AsyncFutureListener}
      *
      * @param listener {@link AsyncFutureListener}
@@ -20,6 +27,6 @@ public interface AsyncFuture<T> {
      *
      * @param response 执行结果
      */
-    void notifyResponse(T response);
+    void notifyResult(T response);
 
 }

@@ -3,7 +3,6 @@ package cn.nova.client;
 import cn.nova.async.AsyncFuture;
 import cn.nova.client.response.AppendNewEntryResponse;
 import cn.nova.client.response.ReadEntryResponse;
-import cn.nova.client.response.ResponseBinder;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 
@@ -16,10 +15,10 @@ import java.util.Map;
  */
 public class ResponseMsgHandler extends ChannelInboundHandlerAdapter {
 
-    private final Map<Long, ResponseBinder> responseBindMap;
+    private final Map<Long, AsyncFuture<?>> futureBindMap;
 
-    public ResponseMsgHandler(Map<Long, ResponseBinder> responseBindMap) {
-        this.responseBindMap = responseBindMap;
+    public ResponseMsgHandler(Map<Long, AsyncFuture<?>> futureBindMap) {
+        this.futureBindMap = futureBindMap;
     }
 
     /**
@@ -37,20 +36,20 @@ public class ResponseMsgHandler extends ChannelInboundHandlerAdapter {
         ByteBuf byteBuf = (ByteBuf) msg;
         long sessionId = byteBuf.readLong();
 
-        ResponseBinder responseBinder = responseBindMap.remove(sessionId);
-        AsyncFuture<?> future = responseBinder.getAsyncFuture();
-        Class<?> futureType = responseBinder.getFutureType();
+        AsyncFuture<?> future = futureBindMap.remove(sessionId);
 
-        if (future == null || futureType == null) {
+        if (future == null) {
             byteBuf.release();
             return;
         }
 
-        if (futureType == ReadEntryResponse.class) {
-            ((AsyncFuture<ReadEntryResponse>)future).notifyResponse(new ReadEntryResponse(byteBuf));
-        } else if (futureType == AppendNewEntryResponse.class) {
+        Class<?> typeClass = future.getResultType();
+
+        if (typeClass == ReadEntryResponse.class) {
+            ((AsyncFuture<ReadEntryResponse>)future).notifyResult(new ReadEntryResponse(byteBuf));
+        } else if (typeClass == AppendNewEntryResponse.class) {
             long entryIndex = byteBuf.readLong();
-            ((AsyncFuture<AppendNewEntryResponse>)future).notifyResponse(new AppendNewEntryResponse(entryIndex));
+            ((AsyncFuture<AppendNewEntryResponse>)future).notifyResult(new AppendNewEntryResponse(entryIndex));
         }
     }
 

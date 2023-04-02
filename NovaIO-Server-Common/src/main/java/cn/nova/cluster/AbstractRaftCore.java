@@ -557,7 +557,7 @@ public abstract class AbstractRaftCore implements RaftCore {
                     changeApplyEntryIndex(syncedEntryIndex);
                     applyEntry(syncedEntryIndex, entryData);
 
-                    asyncFuture.notifyResponse(syncedEntryIndex);
+                    asyncFuture.notifyResult(syncedEntryIndex);
 
                     if ((inSyncEntry = waitEntryQueue.poll()) != null) {
                         long newEntryIndex = applyEntryIndex + 1;
@@ -584,7 +584,7 @@ public abstract class AbstractRaftCore implements RaftCore {
      */
     @Override
     public AsyncFuture<Long> onLeaderAppendEntry(ByteBuf entryData) {
-        AsyncFuture<Long> asyncFuture = new AsyncFutureImpl<>();
+        AsyncFuture<Long> asyncFuture = new AsyncFutureImpl<>(Long.class);
         InSyncEntry newEntry = new InSyncEntry(-1L, entryData, asyncFuture);
 
         locker.lock();
@@ -599,7 +599,7 @@ public abstract class AbstractRaftCore implements RaftCore {
                 waitEntryQueue.offer(newEntry);
             }
         } else {
-            asyncFuture.notifyResponse(-1L);
+            asyncFuture.notifyResult(-1L);
         }
 
         locker.unlock();
