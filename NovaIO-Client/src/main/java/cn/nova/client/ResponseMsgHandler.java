@@ -3,6 +3,7 @@ package cn.nova.client;
 import cn.nova.async.AsyncFuture;
 import cn.nova.client.response.AppendNewEntryResponse;
 import cn.nova.client.response.ReadEntryResponse;
+import cn.nova.client.response.ResponseBinder;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 
@@ -15,12 +16,10 @@ import java.util.Map;
  */
 public class ResponseMsgHandler extends ChannelInboundHandlerAdapter {
 
-    private final Map<Long, AsyncFuture<?>> futurerMap;
-    private final Map<Long, Class<?>> futureTypeMap;
+    private final Map<Long, ResponseBinder> responseBindMap;
 
-    public ResponseMsgHandler(Map<Long, AsyncFuture<?>> futurerMap, Map<Long, Class<?>> futureTypeMap) {
-        this.futurerMap = futurerMap;
-        this.futureTypeMap = futureTypeMap;
+    public ResponseMsgHandler(Map<Long, ResponseBinder> responseBindMap) {
+        this.responseBindMap = responseBindMap;
     }
 
     /**
@@ -38,8 +37,9 @@ public class ResponseMsgHandler extends ChannelInboundHandlerAdapter {
         ByteBuf byteBuf = (ByteBuf) msg;
         long sessionId = byteBuf.readLong();
 
-        AsyncFuture<?> future = futurerMap.remove(sessionId);
-        Class<?> futureType = futureTypeMap.remove(sessionId);
+        ResponseBinder responseBinder = responseBindMap.remove(sessionId);
+        AsyncFuture<?> future = responseBinder.getAsyncFuture();
+        Class<?> futureType = responseBinder.getFutureType();
 
         if (future == null || futureType == null) {
             byteBuf.release();

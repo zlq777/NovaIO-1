@@ -438,8 +438,15 @@ public abstract class AbstractRaftCore implements RaftCore {
         locker.lock();
         receiveLeaderMsg(leaderIndex, leaderTerm);
 
-        if (inSyncEntryIndex > applyEntryIndex && inSyncEntry != null) {
-            changeApplyEntryIndex(inSyncEntryIndex);
+        if (inSyncEntry != null) {
+
+            long syncedEntryIndex = inSyncEntry.entryIndex;
+
+            if (inSyncEntryIndex > syncedEntryIndex) {
+                storage.writeEntry(syncedEntryIndex, inSyncEntry.entryData);
+                changeApplyEntryIndex(syncedEntryIndex);
+                applyEntry(syncedEntryIndex, inSyncEntry.entryData);
+            }
         }
 
         ByteBuf content = alloc.buffer();

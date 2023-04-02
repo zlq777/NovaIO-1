@@ -4,6 +4,7 @@ import cn.nova.async.AsyncFuture;
 import cn.nova.async.AsyncFutureImpl;
 import cn.nova.client.response.AppendNewEntryResponse;
 import cn.nova.client.response.ReadEntryResponse;
+import cn.nova.client.response.ResponseBinder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
@@ -22,19 +23,16 @@ import static cn.nova.CommonUtils.*;
 class NovaIOClientImpl implements NovaIOClient {
 
     private static final int MAX_BYTE_SIZE = 32768;
-    private final Map<Long, Class<?>> futureTypeMap;
-    private final Map<Long, AsyncFuture<?>> futureMap;
+    private final Map<Long, ResponseBinder> responseBindMap;
     private final EventLoopGroup ioThreadGroup;
     private final AtomicLong sessionIdCreator;
     private final Channel channel;
 
     NovaIOClientImpl(EventLoopGroup ioThreadGroup, Channel channel,
-                     Map<Long, AsyncFuture<?>> futureMap,
-                     Map<Long, Class<?>> futureTypeMap) {
+                     Map<Long, ResponseBinder> responseBindMap) {
         this.sessionIdCreator = new AtomicLong(-1L);
         this.ioThreadGroup = ioThreadGroup;
-        this.futureTypeMap = futureTypeMap;
-        this.futureMap = futureMap;
+        this.responseBindMap = responseBindMap;
         this.channel = channel;
     }
 
@@ -49,8 +47,7 @@ class NovaIOClientImpl implements NovaIOClient {
         long sessionId = sessionIdCreator.incrementAndGet();
         AsyncFuture<ReadEntryResponse> future = new AsyncFutureImpl<>();
 
-        futureMap.put(sessionId, future);
-        futureTypeMap.put(sessionId, ReadEntryResponse.class);
+        responseBindMap.put(sessionId, new ResponseBinder(future, ReadEntryResponse.class));
 
         ByteBuf byteBuf = ByteBufAllocator.DEFAULT.buffer().writerIndex(4);
 
@@ -78,8 +75,7 @@ class NovaIOClientImpl implements NovaIOClient {
         long sessionId = sessionIdCreator.incrementAndGet();
         AsyncFuture<AppendNewEntryResponse> future = new AsyncFutureImpl<>();
 
-        futureMap.put(sessionId, future);
-        futureTypeMap.put(sessionId, AppendNewEntryResponse.class);
+        responseBindMap.put(sessionId, new ResponseBinder(future, AppendNewEntryResponse.class));
 
         ByteBuf byteBuf = ByteBufAllocator.DEFAULT.buffer().writerIndex(4);
 
