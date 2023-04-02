@@ -9,10 +9,10 @@ package cn.nova.async;
 public interface AsyncFutureListener<T> {
 
     /**
-     * 通知NovaIO服务节点计算执行的异步返回结果
+     * 通知异步返回结果
      *
-     * @param response NovaIO服务节点计算执行的异步返回结果
+     * @param result 异步返回结果
      */
-    void onNotify(T response);
+    void onNotify(T result);
 
 }

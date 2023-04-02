@@ -1,15 +1,15 @@
 package cn.nova.client.response;
 
 /**
- * {@link AppendNewEntryResponse}是写入Entry数据的响应结果
+ * {@link AppendNewEntryResult}是写入Entry数据的响应响应
  *
  * @author RealDragonking
  */
-public class AppendNewEntryResponse {
+public class AppendNewEntryResult {
 
     private final long entryIndex;
 
-    public AppendNewEntryResponse(long entryIndex) {
+    public AppendNewEntryResult(long entryIndex) {
         this.entryIndex = entryIndex;
     }
 

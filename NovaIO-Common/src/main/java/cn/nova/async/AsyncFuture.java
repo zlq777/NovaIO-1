@@ -16,6 +16,13 @@ public interface AsyncFuture<T> {
     Class<T> getResultType();
 
     /**
+     * 获取到自动生成的、不重复的sessionId
+     *
+     * @return sessionId
+     */
+    long getSessionId();
+
+    /**
      * 新增一个{@link AsyncFutureListener}
      *
      * @param listener {@link AsyncFutureListener}
@@ -25,8 +32,8 @@ public interface AsyncFuture<T> {
     /**
      * 通知异步执行结果
      *
-     * @param response 执行结果
+     * @param result 执行结果
      */
-    void notifyResult(T response);
+    void notifyResult(T result);
 
 }

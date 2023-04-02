@@ -38,7 +38,9 @@ public final class CommonUtils {
     public static void writePath(ByteBuf byteBuf, String path) {
         int writerIdx = byteBuf.writerIndex() + 4;
         int pathLen = byteBuf.writerIndex(writerIdx).writeCharSequence(path, StandardCharsets.UTF_8);
-        byteBuf.writerIndex(writerIdx - 4).writeInt(pathLen).writerIndex(writerIdx + pathLen);
+        byteBuf.writerIndex(writerIdx - 4)
+                .writeInt(pathLen)
+                .writerIndex(writerIdx + pathLen);
     }
 
     /**

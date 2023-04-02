@@ -3,15 +3,15 @@ package cn.nova.client.response;
 import io.netty.buffer.ByteBuf;
 
 /**
- * {@link ReadEntryResponse}是读取Entry数据的响应结果
+ * {@link ReadEntryResult}是读取Entry数据的响应消息
  *
  * @author RealDragonking
  */
-public class ReadEntryResponse {
+public class ReadEntryResult {
 
     private final ByteBuf entryData;
     
-    public ReadEntryResponse(ByteBuf entryData) {
+    public ReadEntryResult(ByteBuf entryData) {
         this.entryData = entryData;
     }
 

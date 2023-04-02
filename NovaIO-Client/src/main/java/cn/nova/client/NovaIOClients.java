@@ -29,10 +29,10 @@ import static cn.nova.CommonUtils.getThreadFactory;
 public final class NovaIOClients {
 
     private static final Logger LOG = LogManager.getLogger(NovaIOClients.class);
+    private static final int DEFAULT_RECONNECT_INTERVAL = 1000;
     private static final int DEFAULT_IO_THREAD_NUMBER = 2;
     private static final int MAX_FRAME_LENGTH = 65535;
     private static final int DEFAULT_TIMEOUT = 3000;
-    private static final int DEFAULT_RECONNECT_INTERVAL = 1000;
 
     private NovaIOClients() {}
 
@@ -41,9 +41,8 @@ public final class NovaIOClients {
      *
      * @param addressList NovaIO视图节点的连接地址列表
      * @return {@link NovaIOClient}
-     * @throws Exception 创建过程中产生的连接异常
      */
-    public static NovaIOClient create(List<InetSocketAddress> addressList) throws Exception {
+    public static NovaIOClient create(List<InetSocketAddress> addressList) {
         return create(addressList, DEFAULT_IO_THREAD_NUMBER, DEFAULT_TIMEOUT, DEFAULT_RECONNECT_INTERVAL);
     }
 
@@ -52,9 +51,8 @@ public final class NovaIOClients {
      *
      * @param addresses NovaIO视图节点的连接地址列表
      * @return {@link NovaIOClient}
-     * @throws Exception 创建过程中产生的连接异常
      */
-    public static NovaIOClient create(InetSocketAddress[] addresses) throws Exception {
+    public static NovaIOClient create(InetSocketAddress[] addresses) {
         return create(addresses, DEFAULT_IO_THREAD_NUMBER, DEFAULT_TIMEOUT, DEFAULT_RECONNECT_INTERVAL);
     }
 
@@ -66,10 +64,9 @@ public final class NovaIOClients {
      * @param timeout 响应超时时间
      * @param reconnectInterval 重连间隔时间
      * @return {@link NovaIOClient}
-     * @throws Exception 创建过程中产生的连接异常
      */
     public static NovaIOClient create(List<InetSocketAddress> addressList,
-                                      int ioThreadNumber, int timeout, int reconnectInterval) throws Exception {
+                                      int ioThreadNumber, int timeout, int reconnectInterval) {
         int nodeNumber = addressList.size();
         InetSocketAddress[] addresses = new InetSocketAddress[nodeNumber];
 
@@ -88,15 +85,16 @@ public final class NovaIOClients {
      * @param timeout 响应超时时间
      * @param reconnectInterval 重连间隔时间
      * @return {@link NovaIOClient}
-     * @throws Exception 创建过程中产生的连接异常
      */
     public static NovaIOClient create(InetSocketAddress[] addresses,
-                                      int ioThreadNumber, int timeout, int reconnectInterval) throws Exception {
+                                      int ioThreadNumber, int timeout, int reconnectInterval) {
 
-        Map<Long, AsyncFuture<?>> futureBindMap = new ConcurrentHashMap<>();
+        ThreadFactory threadFactory = getThreadFactory("NovaIO-Client", true);
+
+        Map<Long, AsyncFuture<?>> sessionMap = new ConcurrentHashMap<>();
         int nodeNumber = addresses.length;
 
-        EventLoopGroup ioThreadGroup = new NioEventLoopGroup(ioThreadNumber);
+        EventLoopGroup ioThreadGroup = new NioEventLoopGroup(ioThreadNumber, threadFactory);
         Channel[] channels = new Channel[nodeNumber];
 
         Bootstrap bootstrap = new Bootstrap()
@@ -107,11 +105,11 @@ public final class NovaIOClients {
                     protected void initChannel(SocketChannel ch) {
                         ChannelPipeline pipeline = ch.pipeline();
                         pipeline.addLast(new LengthFieldBasedFrameDecoder(MAX_FRAME_LENGTH, 0, 4, 0, 4))
-                                .addLast(new ResponseMsgHandler(futureBindMap));
+                                .addLast(new ResponseMsgHandler(sessionMap));
                     }
                 });
 
-        Timer connector = new HashedWheelTimer(getThreadFactory("connector", false));
+        Timer timer = new HashedWheelTimer(threadFactory);
         TimerTask reconnectTask = new TimerTask() {
             @Override
             public void run(Timeout timeout) {
@@ -125,13 +123,13 @@ public final class NovaIOClients {
                         }
                     }
                 }
-                connector.newTimeout(this, reconnectInterval, TimeUnit.MILLISECONDS);
+                timer.newTimeout(this, reconnectInterval, TimeUnit.MILLISECONDS);
             }
         };
 
-        connector.newTimeout(reconnectTask, 0, TimeUnit.MILLISECONDS);
+        timer.newTimeout(reconnectTask, 0, TimeUnit.MILLISECONDS);
 
-        return new NovaIOClientImpl(ioThreadGroup, connector, futureBindMap, channels, timeout);
+        return new NovaIOClientImpl(ioThreadGroup, timer, sessionMap, channels, timeout);
     }
 
 }
