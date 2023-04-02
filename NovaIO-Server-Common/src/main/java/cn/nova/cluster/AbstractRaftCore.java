@@ -469,8 +469,11 @@ public abstract class AbstractRaftCore implements RaftCore {
             InSyncEntry inSyncEntry = this.inSyncEntry;
 
             if (inSyncEntry != null) {
-                changeApplyEntryIndex(inSyncEntry.entryIndex);
-                applyEntry(applyEntryIndex, inSyncEntry.entryData);
+                long syncedEntryIndex = inSyncEntry.entryIndex;
+
+                storage.writeEntry(syncedEntryIndex, inSyncEntry.entryData);
+                changeApplyEntryIndex(syncedEntryIndex);
+                applyEntry(syncedEntryIndex, inSyncEntry.entryData);
             }
 
             this.inSyncEntry = new InSyncEntry(entryIndex, entryData, null);
@@ -535,21 +538,25 @@ public abstract class AbstractRaftCore implements RaftCore {
         if (state == RaftState.LEADER) {
 
             ClusterNode node = getNode(nodeIndex);
-            InSyncEntry inSyncEntry = this.inSyncEntry;
 
             if (inSyncEntry != null && syncedEntryIndex == inSyncEntry.entryIndex) {
                 if (++ syncedNodeNumber == majority) {
 
-                    changeApplyEntryIndex(syncedEntryIndex);
-                    applyEntry(syncedEntryIndex, inSyncEntry.entryData);
+                    InSyncEntry syncedEntry = inSyncEntry;
+                    ByteBuf entryData = syncedEntry.entryData;
+                    AsyncFuture<Long> asyncFuture = syncedEntry.asyncFuture;
 
-                    inSyncEntry.asyncFuture.notifyResponse(syncedEntryIndex);
+                    storage.writeEntry(syncedEntryIndex, entryData);
+                    changeApplyEntryIndex(syncedEntryIndex);
+                    applyEntry(syncedEntryIndex, entryData);
+
+                    asyncFuture.notifyResponse(syncedEntryIndex);
 
                     if ((inSyncEntry = waitEntryQueue.poll()) != null) {
-                        inSyncEntry.entryIndex = applyEntryIndex + 1;
+                        long newEntryIndex = applyEntryIndex + 1;
 
                         syncedNodeNumber = 1;
-                        this.inSyncEntry = inSyncEntry;
+                        inSyncEntry.entryIndex = newEntryIndex;
                     }
                 }
             }

@@ -33,7 +33,8 @@ public class DataNodeRaftCore extends AbstractRaftCore {
      */
     @Override
     public void applyEntry(long entryIndex, ByteBuf entryData) {
-
+        entryData.release();
+        // 这里我们直接释放字节缓冲区的引用计数就行，不需要额外组织数据视图
     }
 
 }

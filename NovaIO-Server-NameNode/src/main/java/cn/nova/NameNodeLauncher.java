@@ -50,7 +50,7 @@ public final class NameNodeLauncher {
                 tickTime,
                 TimeUnit.MILLISECONDS);
 
-        RaftCore stateMachine = new NameNodeRaftCore(
+        RaftCore raftCore = new NameNodeRaftCore(
                 clusterInfo,
                 ByteBufAllocator.DEFAULT,
                 timeConfig,
@@ -59,7 +59,9 @@ public final class NameNodeLauncher {
                 timer,
                 tickTime);
 
-        udpHandler.register(new RaftService(stateMachine));
+        udpHandler.register(new RaftService(raftCore));
+
+        tcpHandler.register(new ClientService(raftCore));
 
         onShutdown(() -> {
             udpService.close();
@@ -69,7 +71,7 @@ public final class NameNodeLauncher {
         });
 
         startUDPService(udpService);
-        stateMachine.start();
+        raftCore.start();
         startTCPService(tcpService);
     }
 

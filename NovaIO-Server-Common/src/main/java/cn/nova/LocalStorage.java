@@ -35,7 +35,8 @@ public interface LocalStorage {
     void readEntry(long entryIndex, ByteBuf byteBuf);
 
     /**
-     * 从{@link ByteBuf}字节缓冲区中读取Entry类型的数据,统一为32KB，并写入硬盘中
+     * 从{@link ByteBuf}字节缓冲区中读取Entry类型的数据,统一为32KB，并写入硬盘中。
+     * 这不会增加{@link ByteBuf}的readIndex
      *
      * @param entryIndex Entry索引
      * @param byteBuf {@link ByteBuf}

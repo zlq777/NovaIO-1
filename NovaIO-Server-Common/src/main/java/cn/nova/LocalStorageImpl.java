@@ -104,7 +104,11 @@ public class LocalStorageImpl implements LocalStorage {
 
         try {
             parseLongToByte(longBucket, entryIndex);
+
+            byteBuf.markReaderIndex();
             byteBuf.readBytes(entryBucket);
+            byteBuf.resetReaderIndex();
+
             rocksDB.put(longBucket, entryBucket);
         } catch (Exception e) {
             e.printStackTrace();
