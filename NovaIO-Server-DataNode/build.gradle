@@ -16,6 +16,11 @@ jar {
 
 dependencies {
     implementation (
+            'io.netty:netty-buffer:4.1+',
+            'io.netty:netty-common:4.1+',
+            'io.netty:netty-resolver:4.1+',
+            'io.netty:netty-transport:4.1+',
+            project(':NovaIO-Common'),
             project(':NovaIO-Server-Common')
     )
 }

@@ -4,14 +4,14 @@ import cn.nova.async.AsyncFuture;
 import io.netty.buffer.ByteBuf;
 
 /**
- * {@link RaftNode}定义了raft分布式共识算法的全部细节，方便进行框架化的实现
+ * {@link RaftCore}定义了raft分布式共识算法的全部细节，方便进行框架化的实现
  *
  * @author RealDragonking
  */
-public interface RaftNode {
+public interface RaftCore {
 
     /**
-     * 启动此{@link RaftNode}
+     * 启动此{@link RaftCore}
      */
     void start();
 

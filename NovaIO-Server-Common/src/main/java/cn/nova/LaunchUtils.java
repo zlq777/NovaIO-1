@@ -26,7 +26,7 @@ import java.util.List;
  */
 public final class LaunchUtils {
 
-    private static final Logger LOG = LogManager.getLogger(Launcher.class);
+    private static final Logger LOG = LogManager.getLogger(LaunchUtils.class);
 
     private LaunchUtils() {}
 

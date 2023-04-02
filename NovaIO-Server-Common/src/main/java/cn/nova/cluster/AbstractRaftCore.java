@@ -23,13 +23,14 @@ import java.util.concurrent.locks.ReentrantLock;
 import static cn.nova.CommonUtils.*;
 
 /**
- * {@link RaftNode}的默认实现
+ * 实现了{@link RaftCore}的核心算法逻辑，{@link RaftCore#applyEntry(long, ByteBuf)}也就是EntryData的应用，
+ * 还需要由子类给出具体实现
  *
  * @author RealDragonking
  */
-public abstract class RaftNodeImpl implements RaftNode {
+public abstract class AbstractRaftCore implements RaftCore {
 
-    private static final Logger LOG = LogManager.getLogger(RaftNode.class);
+    private static final Logger LOG = LogManager.getLogger(RaftCore.class);
     private final Queue<InSyncEntry> waitEntryQueue;
     private final ClusterNode[] otherNodes;
     private final ByteBufAllocator alloc;
@@ -118,13 +119,13 @@ public abstract class RaftNodeImpl implements RaftNode {
     private volatile ClusterNode leader;
     private volatile RaftState state;
 
-    public RaftNodeImpl(ClusterInfo clusterInfo,
-                        ByteBufAllocator alloc,
-                        TimeConfig timeConfig,
-                        UDPService udpService,
-                        LocalStorage storage,
-                        Timer timer,
-                        int tickTime) {
+    public AbstractRaftCore(ClusterInfo clusterInfo,
+                            ByteBufAllocator alloc,
+                            TimeConfig timeConfig,
+                            UDPService udpService,
+                            LocalStorage storage,
+                            Timer timer,
+                            int tickTime) {
 
         this.otherNodes = clusterInfo.getOtherNodes();
         this.waitEntryQueue = new ArrayDeque<>();
@@ -148,7 +149,7 @@ public abstract class RaftNodeImpl implements RaftNode {
     }
 
     /**
-     * 启动此{@link RaftNode}
+     * 启动此{@link RaftCore}
      */
     @Override
     public void start() {

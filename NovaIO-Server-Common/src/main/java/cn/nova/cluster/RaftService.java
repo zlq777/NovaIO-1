@@ -1,6 +1,5 @@
-package cn.nova.service;
+package cn.nova.cluster;
 
-import cn.nova.cluster.RaftNode;
 import cn.nova.network.PathMapping;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.socket.DatagramPacket;
@@ -12,14 +11,14 @@ import io.netty.channel.socket.DatagramPacket;
  */
 public final class RaftService {
 
-    private final RaftNode stateMachine;
+    private final RaftCore stateMachine;
 
-    public RaftService(RaftNode stateMachine) {
+    public RaftService(RaftCore stateMachine) {
         this.stateMachine = stateMachine;
     }
 
     /**
-     * 对应于{@link RaftNode#receiveVoteRequest(int, long, long)}
+     * 对应于{@link RaftCore#receiveVoteRequest(int, long, long)}
      *
      * @param packet {@link DatagramPacket}数据包
      */
@@ -35,7 +34,7 @@ public final class RaftService {
     }
 
     /**
-     * 对应于{@link RaftNode#receiveVoteResponse(long, boolean)}
+     * 对应于{@link RaftCore#receiveVoteResponse(long, boolean)}
      *
      * @param packet {@link DatagramPacket}数据包
      */
@@ -50,7 +49,7 @@ public final class RaftService {
     }
 
     /**
-     * 对应于{@link RaftNode#receiveHeartbeatMsg(int, long, long)}
+     * 对应于{@link RaftCore#receiveHeartbeatMsg(int, long, long)}
      *
      * @param packet {@link DatagramPacket}数据包
      */
@@ -66,7 +65,7 @@ public final class RaftService {
     }
 
     /**
-     * 对应于{@link RaftNode#receiveHeartbeatResponse(int, long)}
+     * 对应于{@link RaftCore#receiveHeartbeatResponse(int, long)}
      *
      * @param packet {@link DatagramPacket}数据包
      */
@@ -81,7 +80,7 @@ public final class RaftService {
     }
 
     /**
-     * 对应于{@link RaftNode#receiveEntrySyncMsg(int, long, long, ByteBuf)}
+     * 对应于{@link RaftCore#receiveEntrySyncMsg(int, long, long, ByteBuf)}
      *
      * @param packet {@link DatagramPacket}数据包
      */
@@ -96,7 +95,7 @@ public final class RaftService {
     }
 
     /**
-     * 对应于{@link RaftNode#receiveEntrySyncResponse(int, long)}
+     * 对应于{@link RaftCore#receiveEntrySyncResponse(int, long)}
      *
      * @param packet {@link DatagramPacket}数据包
      */
