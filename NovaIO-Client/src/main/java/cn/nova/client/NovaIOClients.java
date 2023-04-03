@@ -97,6 +97,7 @@ public final class NovaIOClients {
     public static NovaIOClient create(InetSocketAddress[] addresses,
                                       int ioThreadNumber, int timeout, int reconnectInterval, int initTimeout)
             throws Exception {
+
         ThreadFactory threadFactory = getThreadFactory("NovaIO-Client", true);
         int nodeNumber = addresses.length;
 

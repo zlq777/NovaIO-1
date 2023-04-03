@@ -155,7 +155,7 @@ final class NovaIOClientImpl implements NovaIOClient {
                 ByteBuf byteBuf = alloc.buffer().writerIndex(4);
 
                 writePath(byteBuf, "/query-leader");
-                byteBuf.writeLong(sessionId).writeInt(channelIndex);
+                byteBuf.writeLong(sessionId);
 
                 int writerIndex = byteBuf.writerIndex();
                 byteBuf.writerIndex(0)
