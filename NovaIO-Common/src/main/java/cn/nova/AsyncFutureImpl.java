@@ -1,4 +1,4 @@
-package cn.nova.async;
+package cn.nova;
 
 import java.util.concurrent.atomic.AtomicLong;
 

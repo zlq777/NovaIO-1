@@ -1,4 +1,4 @@
-package cn.nova.async;
+package cn.nova;
 
 /**
  * {@link AsyncFutureListener}定义了对{@link AsyncFuture}异步返回结果的监听，本质上是一个功能性的回调函数

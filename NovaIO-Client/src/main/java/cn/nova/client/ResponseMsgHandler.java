@@ -1,6 +1,6 @@
 package cn.nova.client;
 
-import cn.nova.async.AsyncFuture;
+import cn.nova.AsyncFuture;
 import cn.nova.client.response.QueryLeaderResult;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;

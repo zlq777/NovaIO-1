@@ -1,4 +1,4 @@
-package cn.nova.async;
+package cn.nova;
 
 /**
  * {@link AsyncFuture}定义了本地或是远程计算执行的异步返回结果，可以通过添加{@link AsyncFutureListener}的方式挂载回调函数

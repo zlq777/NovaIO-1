@@ -1,7 +1,8 @@
 package cn.nova.client;
 
-import cn.nova.async.AsyncFuture;
-import cn.nova.async.AsyncFutureImpl;
+import cn.nova.AsyncFuture;
+import cn.nova.AsyncFutureImpl;
+import cn.nova.DynamicCounter;
 import cn.nova.client.response.AppendNewEntryResult;
 import cn.nova.client.response.QueryLeaderResult;
 import cn.nova.client.response.ReadEntryResult;
@@ -10,13 +11,13 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoopGroup;
-import io.netty.util.Timeout;
 import io.netty.util.Timer;
-import io.netty.util.TimerTask;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -42,8 +43,9 @@ import static cn.nova.CommonUtils.writePath;
  */
 final class NovaIOClientImpl implements NovaIOClient {
 
+    private static final Logger log = LogManager.getLogger(NovaIOClientImpl.class);
     private final Map<Long, AsyncFuture<?>> sessionMap;
-    private final CompletableFuture<Boolean> initFuture;
+    private final AtomicBoolean queryLeaderState;
     private final EventLoopGroup ioThreadGroup;
     private final Channel[] viewNodeChannels;
     private final ByteBufAllocator alloc;
@@ -51,7 +53,6 @@ final class NovaIOClientImpl implements NovaIOClient {
     private final Lock locker;
     private final Timer timer;
     private final int timeout;
-    private volatile boolean notInit;
     private volatile long viewNodeLeaderTerm;
     private Channel viewNodeLeaderChannel;
 
@@ -61,9 +62,8 @@ final class NovaIOClientImpl implements NovaIOClient {
                      Channel[] viewNodeChannels,
                      int timeout) {
 
+        this.queryLeaderState = new AtomicBoolean(false);
         this.alloc = ByteBufAllocator.DEFAULT;
-
-        this.initFuture = new CompletableFuture<>();
         this.locker = new ReentrantLock();
 
         this.viewNodeChannels = viewNodeChannels;
@@ -72,7 +72,6 @@ final class NovaIOClientImpl implements NovaIOClient {
         this.bootstrap = bootstrap;
         this.timer = timer;
 
-        this.notInit = true;
         this.timeout = timeout;
     }
 
@@ -108,32 +107,33 @@ final class NovaIOClientImpl implements NovaIOClient {
     }
 
     /**
-     * 定时检查和ViewNode的Leader节点的{@link Channel}通信信道是否有效
+     * 在轻量级锁保护同步的前提上，调用{@link #queryViewNodeLeader0()}启动ViewNode leader更新的进程
      */
-    void startLoopQueryViewNodeLeader() throws Exception {
-        TimerTask queryTask = new TimerTask() {
-            @Override
-            public void run(Timeout timeout) {
-                //
-            }
-        };
-        queryTask.run(null);
-    }
-
-    /**
-     * 等待和ViewNode集群的Leader节点连接创建完成
-     *
-     * @param initTimeout 初始化连接超时时间
-     * @exception Exception 和ViewNode集群的Leader节点连接创建失败引发的异常
-     */
-    void waitForInitComplete(int initTimeout) throws Exception {
-        initFuture.get(initTimeout, TimeUnit.MILLISECONDS);
+    private void queryViewNodeLeader() {
+        if (queryLeaderState.compareAndSet(false, true)) {
+            log.info("ViewNode leader响应超时，正在进行更新操作...");
+            queryViewNodeLeader0();
+        }
     }
 
     /**
      * 向所有ViewNode发出询问消息，探测最新的leader
      */
-    private void queryViewNodeLeader() {
+    private void queryViewNodeLeader0() {
+        DynamicCounter counter = new DynamicCounter() {
+            @Override
+            public void onAchieveTarget() {
+                if (viewNodeLeaderChannel == null) {
+                    log.info("更新ViewNode leader失败，正在进行重试...");
+                    queryViewNodeLeader0();
+                } else {
+                    queryLeaderState.set(false);
+                }
+            }
+        };
+
+        viewNodeLeaderChannel = null;
+
         for (int i = 0; i < viewNodeChannels.length; i++) {
 
             Channel channel = viewNodeChannels[i];
@@ -161,6 +161,7 @@ final class NovaIOClientImpl implements NovaIOClient {
             channel.writeAndFlush(byteBuf);
 
             addTimeoutTask(sessionId);
+            counter.addTarget();
 
             responseFuture.addListener(result -> {
                 if (result == null) {
@@ -171,15 +172,14 @@ final class NovaIOClientImpl implements NovaIOClient {
                     if (result.isLeader() && result.getTerm() > viewNodeLeaderTerm) {
                         viewNodeLeaderTerm = result.getTerm();
                         viewNodeLeaderChannel = channel;
-                        if (notInit) {
-                            notInit = false;
-                            initFuture.complete(true);
-                        }
                     }
                     locker.unlock();
                 }
+                counter.addCount();
             });
         }
+
+        counter.determineTarget();
     }
 
     /**

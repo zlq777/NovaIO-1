@@ -1,8 +1,8 @@
 package cn.nova.cluster;
 
 import cn.nova.LocalStorage;
-import cn.nova.async.AsyncFuture;
-import cn.nova.async.AsyncFutureImpl;
+import cn.nova.AsyncFuture;
+import cn.nova.AsyncFutureImpl;
 import cn.nova.config.TimeConfig;
 import cn.nova.network.UDPService;
 import io.netty.buffer.ByteBuf;

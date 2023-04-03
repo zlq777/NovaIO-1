@@ -1,6 +1,6 @@
 package cn.nova.client;
 
-import cn.nova.async.AsyncFuture;
+import cn.nova.AsyncFuture;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -28,7 +28,7 @@ import static cn.nova.CommonUtils.getThreadFactory;
  */
 public final class NovaIOClients {
 
-    private static final Logger LOG = LogManager.getLogger(NovaIOClients.class);
+    private static final Logger log = LogManager.getLogger(NovaIOClients.class);
     private static final int DEFAULT_RECONNECT_INTERVAL = 1000;
     private static final int DEFAULT_INIT_TIMEOUT = 10000;
     private static final int DEFAULT_IO_THREAD_NUMBER = 2;
@@ -120,7 +120,7 @@ public final class NovaIOClients {
                     }
                 });
 
-        TimerTask viewNodeReconnectTask = new TimerTask() {
+        TimerTask reconnectViewNodeTask = new TimerTask() {
             @Override
             public void run(Timeout timeout) {
                 for (int i = 0; i < nodeNumber; i++) {
@@ -129,7 +129,7 @@ public final class NovaIOClients {
                         try {
                             channels[i] = bootstrap.connect(address).sync().channel();
                         } catch (Exception e) {
-                            LOG.info("尝试连接到位于 " + address + " 的ViewNode失败，准备稍后重试...");
+                            log.info("尝试连接到位于 " + address + " 的ViewNode失败，准备稍后重试...");
                         }
                     }
                 }
@@ -137,12 +137,9 @@ public final class NovaIOClients {
             }
         };
 
-        viewNodeReconnectTask.run(null);
+        reconnectViewNodeTask.run(null);
 
         NovaIOClientImpl clientImpl = new NovaIOClientImpl(ioThreadGroup, timer, sessionMap, bootstrap, channels, timeout);
-
-        clientImpl.startLoopQueryViewNodeLeader();
-        clientImpl.waitForInitComplete(initTimeout);
 
         return clientImpl;
     }

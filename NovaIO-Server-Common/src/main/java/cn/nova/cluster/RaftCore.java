@@ -1,6 +1,6 @@
 package cn.nova.cluster;
 
-import cn.nova.async.AsyncFuture;
+import cn.nova.AsyncFuture;
 import io.netty.buffer.ByteBuf;
 
 /**
