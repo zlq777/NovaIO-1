@@ -607,6 +607,26 @@ public abstract class AbstractRaftCore implements RaftCore {
     }
 
     /**
+     * 获取到当前节点是否是Leader身份
+     *
+     * @return 当前节点是否是Leader身份
+     */
+    @Override
+    public boolean isLeader() {
+        return state == RaftState.LEADER;
+    }
+
+    /**
+     * 获取到当前节点所处的任期
+     *
+     * @return 当前节点所处的任期
+     */
+    @Override
+    public long getCurrentTerm() {
+        return this.currentTerm;
+    }
+
+    /**
      * {@link InSyncEntry}是正在进行同步、等待被确认应用的Entry
      *
      * @author RealDragonking

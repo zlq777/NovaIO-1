@@ -83,4 +83,18 @@ public interface RaftCore {
      */
     void applyEntry(long entryIndex, ByteBuf entryData);
 
+    /**
+     * 获取到当前节点是否是Leader身份
+     *
+     * @return 当前节点是否是Leader身份
+     */
+    boolean isLeader();
+
+    /**
+     * 获取到当前节点所处的任期
+     *
+     * @return 当前节点所处的任期
+     */
+    long getCurrentTerm();
+
 }

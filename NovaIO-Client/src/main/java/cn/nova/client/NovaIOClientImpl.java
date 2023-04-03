@@ -2,19 +2,24 @@ package cn.nova.client;
 
 import cn.nova.async.AsyncFuture;
 import cn.nova.async.AsyncFutureImpl;
-import cn.nova.async.AsyncFutureListener;
 import cn.nova.client.response.AppendNewEntryResult;
 import cn.nova.client.response.QueryLeaderResult;
 import cn.nova.client.response.ReadEntryResult;
+import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoopGroup;
+import io.netty.util.Timeout;
 import io.netty.util.Timer;
+import io.netty.util.TimerTask;
 
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static cn.nova.CommonUtils.writePath;
 
@@ -39,24 +44,38 @@ import static cn.nova.CommonUtils.writePath;
 final class NovaIOClientImpl implements NovaIOClient {
 
     private final Map<Long, AsyncFuture<?>> sessionMap;
-    private final ByteBufAllocator alloc;
+    private final CompletableFuture<Boolean> initFuture;
     private final AtomicBoolean queryLeaderLock;
     private final EventLoopGroup ioThreadGroup;
     private final Channel[] viewNodeChannels;
+    private final ByteBufAllocator alloc;
+    private final Bootstrap bootstrap;
+    private final Lock locker;
     private final Timer timer;
     private final int timeout;
-    private Channel leaderChannel;
+    private volatile boolean notInit;
+    private volatile long viewNodeLeaderTerm;
+    private Channel viewNodeLeaderChannel;
 
     NovaIOClientImpl(EventLoopGroup ioThreadGroup, Timer timer,
                      Map<Long, AsyncFuture<?>> sessionMap,
+                     Bootstrap bootstrap,
                      Channel[] viewNodeChannels,
                      int timeout) {
+
         this.alloc = ByteBufAllocator.DEFAULT;
+
         this.queryLeaderLock = new AtomicBoolean(false);
+        this.initFuture = new CompletableFuture<>();
+        this.locker = new ReentrantLock();
+
         this.viewNodeChannels = viewNodeChannels;
         this.ioThreadGroup = ioThreadGroup;
         this.sessionMap = sessionMap;
+        this.bootstrap = bootstrap;
         this.timer = timer;
+
+        this.notInit = true;
         this.timeout = timeout;
     }
 
@@ -92,13 +111,33 @@ final class NovaIOClientImpl implements NovaIOClient {
     }
 
     /**
+     * 定时检查和ViewNode的Leader节点的{@link Channel}通信信道是否有效
+     */
+    void startLoopQueryViewNodeLeader() {
+        TimerTask queryTask = new TimerTask() {
+            @Override
+            public void run(Timeout timeout) {
+                //
+            }
+        };
+        timer.newTimeout(queryTask, 0, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * 等待和ViewNode集群的Leader节点连接创建完成
+     *
+     * @param initTimeout 初始化连接超时时间
+     * @exception Exception 和ViewNode集群的Leader节点连接创建失败引发的异常
+     */
+    void waitForInitComplete(int initTimeout) throws Exception {
+        initFuture.get(initTimeout, TimeUnit.MILLISECONDS);
+    }
+
+    /**
      * 向所有ViewNode发出询问消息，探测最新的leader
      */
     private void queryViewNodeLeader() {
         if (queryLeaderLock.compareAndSet(false, true)) {
-
-            QueryLeaderListener listener = new QueryLeaderListener();
-
             for (int i = 0; i < viewNodeChannels.length; i++) {
 
                 Channel channel = viewNodeChannels[i];
@@ -108,10 +147,10 @@ final class NovaIOClientImpl implements NovaIOClient {
                     continue;
                 }
 
-                AsyncFuture<QueryLeaderResult> asyncFuture = new AsyncFutureImpl<>(QueryLeaderResult.class);
-                long sessionId = asyncFuture.getSessionId();
+                AsyncFuture<QueryLeaderResult> responseFuture = new AsyncFutureImpl<>(QueryLeaderResult.class);
+                long sessionId = responseFuture.getSessionId();
 
-                sessionMap.put(sessionId, asyncFuture);
+                sessionMap.put(sessionId, responseFuture);
 
                 ByteBuf byteBuf = alloc.buffer().writerIndex(4);
 
@@ -127,16 +166,25 @@ final class NovaIOClientImpl implements NovaIOClient {
 
                 addTimeoutTask(sessionId);
 
-                asyncFuture.addListener(listener);
-                asyncFuture.addListener(result -> {
+                responseFuture.addListener(result -> {
                     if (result == null) {
                         viewNodeChannels[channelIndex] = null;
                         channel.close();
+                    } else {
+                        locker.lock();
+                        if (result.isLeader() && result.getTerm() > viewNodeLeaderTerm) {
+                            viewNodeLeaderTerm = result.getTerm();
+                            viewNodeLeaderChannel = channel;
+                            if (notInit) {
+                                notInit = false;
+                                initFuture.complete(true);
+                            }
+                        }
+                        locker.unlock();
                     }
                 });
             }
-
-            listener.ensureSendAll();
+            queryLeaderLock.set(false);
         }
     }
 
@@ -152,45 +200,6 @@ final class NovaIOClientImpl implements NovaIOClient {
                 asyncFuture.notifyResult(null);
             }
         }, timeout, TimeUnit.MILLISECONDS);
-    }
-
-    /**
-     * 监听{@link QueryLeaderResult}消息，进行Leader节点视图的更新
-     *
-     * @author RealDragonking
-     */
-    private class QueryLeaderListener implements AsyncFutureListener<QueryLeaderResult> {
-        private volatile boolean hasSendAll = false;
-        private volatile int answerNodeNumber = 0;
-        private volatile int queryNodeNumber = 0;
-        private volatile long mostNewTerm = -1L;
-
-        /**
-         * 通知异步返回结果
-         *
-         * @param result 异步返回结果
-         */
-        @Override
-        public void onNotify(QueryLeaderResult result) {
-            if (result == null) {
-                return;
-            }
-            synchronized (this) {
-
-            }
-        }
-
-        /**
-         * 确认所有消息已经发送
-         */
-        private void ensureSendAll() {
-            synchronized (this) {
-                hasSendAll = true;
-                if (answerNodeNumber == queryNodeNumber) {
-
-                }
-            }
-        }
     }
 
 }
