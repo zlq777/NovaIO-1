@@ -17,7 +17,6 @@ import io.netty.util.TimerTask;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -45,7 +44,6 @@ final class NovaIOClientImpl implements NovaIOClient {
 
     private final Map<Long, AsyncFuture<?>> sessionMap;
     private final CompletableFuture<Boolean> initFuture;
-    private final AtomicBoolean queryLeaderLock;
     private final EventLoopGroup ioThreadGroup;
     private final Channel[] viewNodeChannels;
     private final ByteBufAllocator alloc;
@@ -65,7 +63,6 @@ final class NovaIOClientImpl implements NovaIOClient {
 
         this.alloc = ByteBufAllocator.DEFAULT;
 
-        this.queryLeaderLock = new AtomicBoolean(false);
         this.initFuture = new CompletableFuture<>();
         this.locker = new ReentrantLock();
 
@@ -113,14 +110,14 @@ final class NovaIOClientImpl implements NovaIOClient {
     /**
      * 定时检查和ViewNode的Leader节点的{@link Channel}通信信道是否有效
      */
-    void startLoopQueryViewNodeLeader() {
+    void startLoopQueryViewNodeLeader() throws Exception {
         TimerTask queryTask = new TimerTask() {
             @Override
             public void run(Timeout timeout) {
                 //
             }
         };
-        timer.newTimeout(queryTask, 0, TimeUnit.MILLISECONDS);
+        queryTask.run(null);
     }
 
     /**
@@ -137,54 +134,51 @@ final class NovaIOClientImpl implements NovaIOClient {
      * 向所有ViewNode发出询问消息，探测最新的leader
      */
     private void queryViewNodeLeader() {
-        if (queryLeaderLock.compareAndSet(false, true)) {
-            for (int i = 0; i < viewNodeChannels.length; i++) {
+        for (int i = 0; i < viewNodeChannels.length; i++) {
 
-                Channel channel = viewNodeChannels[i];
-                int channelIndex = i;
+            Channel channel = viewNodeChannels[i];
+            int channelIndex = i;
 
-                if (channel == null) {
-                    continue;
-                }
-
-                AsyncFuture<QueryLeaderResult> responseFuture = new AsyncFutureImpl<>(QueryLeaderResult.class);
-                long sessionId = responseFuture.getSessionId();
-
-                sessionMap.put(sessionId, responseFuture);
-
-                ByteBuf byteBuf = alloc.buffer().writerIndex(4);
-
-                writePath(byteBuf, "/query-leader");
-                byteBuf.writeLong(sessionId);
-
-                int writerIndex = byteBuf.writerIndex();
-                byteBuf.writerIndex(0)
-                        .writeInt(writerIndex - 4)
-                        .writerIndex(writerIndex);
-
-                channel.writeAndFlush(byteBuf);
-
-                addTimeoutTask(sessionId);
-
-                responseFuture.addListener(result -> {
-                    if (result == null) {
-                        viewNodeChannels[channelIndex] = null;
-                        channel.close();
-                    } else {
-                        locker.lock();
-                        if (result.isLeader() && result.getTerm() > viewNodeLeaderTerm) {
-                            viewNodeLeaderTerm = result.getTerm();
-                            viewNodeLeaderChannel = channel;
-                            if (notInit) {
-                                notInit = false;
-                                initFuture.complete(true);
-                            }
-                        }
-                        locker.unlock();
-                    }
-                });
+            if (channel == null) {
+                continue;
             }
-            queryLeaderLock.set(false);
+
+            AsyncFuture<QueryLeaderResult> responseFuture = new AsyncFutureImpl<>(QueryLeaderResult.class);
+            long sessionId = responseFuture.getSessionId();
+
+            sessionMap.put(sessionId, responseFuture);
+
+            ByteBuf byteBuf = alloc.buffer().writerIndex(4);
+
+            writePath(byteBuf, "/query-leader");
+            byteBuf.writeLong(sessionId);
+
+            int writerIndex = byteBuf.writerIndex();
+            byteBuf.writerIndex(0)
+                    .writeInt(writerIndex - 4)
+                    .writerIndex(writerIndex);
+
+            channel.writeAndFlush(byteBuf);
+
+            addTimeoutTask(sessionId);
+
+            responseFuture.addListener(result -> {
+                if (result == null) {
+                    viewNodeChannels[channelIndex] = null;
+                    channel.close();
+                } else {
+                    locker.lock();
+                    if (result.isLeader() && result.getTerm() > viewNodeLeaderTerm) {
+                        viewNodeLeaderTerm = result.getTerm();
+                        viewNodeLeaderChannel = channel;
+                        if (notInit) {
+                            notInit = false;
+                            initFuture.complete(true);
+                        }
+                    }
+                    locker.unlock();
+                }
+            });
         }
     }
 

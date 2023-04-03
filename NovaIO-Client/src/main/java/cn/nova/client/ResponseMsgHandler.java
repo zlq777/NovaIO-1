@@ -45,6 +45,7 @@ public class ResponseMsgHandler extends ChannelInboundHandlerAdapter {
         Class<?> typeClass = future.getResultType();
 
         if (typeClass == QueryLeaderResult.class) {
+
             boolean isLeader = byteBuf.readBoolean();
             long term = byteBuf.readLong();
             QueryLeaderResult result = new QueryLeaderResult(isLeader, term);

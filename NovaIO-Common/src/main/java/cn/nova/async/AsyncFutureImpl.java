@@ -76,8 +76,8 @@ public class AsyncFutureImpl<T> implements AsyncFuture<T> {
      * @param result 执行结果
      */
     @Override
-    public void notifyResult(T result) {
-        synchronized (this) {
+    public synchronized void notifyResult(T result) {
+        if (! hasResult) {
             this.hasResult = true;
             this.result = result;
             for (AsyncFutureListener<T> listener : listeners) {

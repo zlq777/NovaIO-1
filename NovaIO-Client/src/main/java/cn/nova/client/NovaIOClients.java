@@ -73,6 +73,7 @@ public final class NovaIOClients {
     public static NovaIOClient create(List<InetSocketAddress> addressList,
                                       int ioThreadNumber, int timeout, int reconnectInterval, int initTimeout)
             throws Exception {
+
         int nodeNumber = addressList.size();
         InetSocketAddress[] addresses = new InetSocketAddress[nodeNumber];
 
