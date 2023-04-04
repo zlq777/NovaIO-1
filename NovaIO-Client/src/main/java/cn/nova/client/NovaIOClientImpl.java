@@ -57,7 +57,9 @@ final class NovaIOClientImpl implements NovaIOClient {
         this.timeout = timeout;
         this.reconnectInterval = reconnectInterval;
 
-        this.viewNodeClient = new RaftClusterClient("ViewNode-Cluster", addresses, new DataNodeInfoSelectTask());
+        Runnable task = new DataNodeInfoSelectTask();
+        this.viewNodeClient = new RaftClusterClient("ViewNode-Cluster", addresses);
+        this.viewNodeClient.setLeaderFirstSelectTask(task);
         this.viewNodeClient.tryConnect();
     }
 
@@ -136,21 +138,21 @@ final class NovaIOClientImpl implements NovaIOClient {
      */
     private class RaftClusterClient {
 
-        private final Queue<WaitMessage> waitMessageQueue;
+        private final Queue<PendingMessage> pendingMessageQueue;
         private final AtomicBoolean leaderChannelState;
-        private final Runnable leaderFirstSelectTask;
         private final InetSocketAddress[] addresses;
         private final boolean[] channelStates;
+        private final Lock queryLeaderLocker;
         private final Channel[] channels;
         private final String clusterName;
         private final Timer timer;
-        private final Lock locker;
         private final int nodeNumber;
         private volatile boolean leaderFirstSelect;
         private volatile long leaderTerm;
+        private Runnable leaderFirstSelectTask;
         private Channel leaderChannel;
 
-        private RaftClusterClient(String clusterName, InetSocketAddress[] addresses, Runnable leaderFirstSelectTask) {
+        private RaftClusterClient(String clusterName, InetSocketAddress[] addresses) {
 
             ThreadFactory timerThreadFactory = getThreadFactory(clusterName + "-Timer", false);
             this.nodeNumber = addresses.length;
@@ -159,43 +161,41 @@ final class NovaIOClientImpl implements NovaIOClient {
 
             this.leaderChannelState = new AtomicBoolean(true);
             this.timer = new HashedWheelTimer(timerThreadFactory);
-            this.waitMessageQueue = new ConcurrentLinkedQueue<>();
+            this.pendingMessageQueue = new ConcurrentLinkedQueue<>();
+            this.queryLeaderLocker = new ReentrantLock();
 
             this.channelStates = new boolean[nodeNumber];
             this.channels = new Channel[nodeNumber];
-            this.locker = new ReentrantLock();
 
-            this.leaderFirstSelectTask = leaderFirstSelectTask;
             this.clusterName = clusterName;
             this.addresses = addresses;
         }
 
         /**
-         * 尝试获取到控制消息发送的标志位（锁），如果标志位修改失败，则加入{@link #waitMessageQueue}等待延迟发送。
+         * 尝试获取到控制消息发送的标志位（锁），如果标志位修改失败，则加入{@link #pendingMessageQueue}等待延迟发送。
          * 请确保{@link ByteBuf}已经完成写入头部的长度字段和路径字段、sessionId
          *
          * @param byteBuf {@link ByteBuf}字节缓冲区
          * @param asyncFuture {@link AsyncFuture}
          */
-        private void sendMessage(ByteBuf byteBuf, AsyncFuture<?> asyncFuture) {
+        private synchronized void sendMessage(ByteBuf byteBuf, AsyncFuture<?> asyncFuture) {
             if (leaderChannelState.compareAndSet(true, false)) {
                 sendMessage0(byteBuf, asyncFuture);
                 leaderChannelState.set(true);
-                flushWaitMessage();
             } else {
-                WaitMessage waiter = new WaitMessage(byteBuf, asyncFuture);
-                waitMessageQueue.offer(waiter);
+                PendingMessage pending = new PendingMessage(byteBuf, asyncFuture);
+                pendingMessageQueue.offer(pending);
             }
         }
 
         /**
-         * 如果{@link #waitMessageQueue}不为空的话，从中取出一条消息调用{@link #sendMessage0(ByteBuf, AsyncFuture)}进行发送
+         * 如果{@link #pendingMessageQueue}不为空的话，从中取出一条消息调用{@link #sendMessage0(ByteBuf, AsyncFuture)}进行发送
          */
-        private void flushWaitMessage() {
-            if (! waitMessageQueue.isEmpty()) {
-                WaitMessage waiter = waitMessageQueue.poll();
-                if (waiter != null) {
-                    sendMessage(waiter.byteBuf, waiter.asyncFuture);
+        private void flushPendingMessage() {
+            if (! pendingMessageQueue.isEmpty()) {
+                PendingMessage pending;
+                while ((pending = pendingMessageQueue.poll()) != null) {
+                    sendMessage(pending.byteBuf, pending.asyncFuture);
                 }
             }
         }
@@ -279,7 +279,7 @@ final class NovaIOClientImpl implements NovaIOClient {
                                 onLeaderFirstSelect();
                             }
                             leaderChannelState.set(true);
-                            flushWaitMessage();
+                            flushPendingMessage();
                         }
                     }
                 };
@@ -310,12 +310,12 @@ final class NovaIOClientImpl implements NovaIOClient {
                             channels[channelIdx] = null;
                             channel.close();
                         } else {
-                            locker.lock();
+                            queryLeaderLocker.lock();
                             if (result.isLeader() && result.getTerm() > leaderTerm) {
                                 leaderTerm = result.getTerm();
                                 leaderChannel = channel;
                             }
-                            locker.unlock();
+                            queryLeaderLocker.unlock();
                         }
                         counter.addCount();
                     });
@@ -326,13 +326,22 @@ final class NovaIOClientImpl implements NovaIOClient {
                     }, timeout, TimeUnit.MILLISECONDS);
                 }
 
-                counter.determineTarget();
+                counter.setTarget();
 
             }, reconnectInterval, TimeUnit.MILLISECONDS);
         }
 
         /**
-         * 作用于第一次获取到集群leader节点信息时刻的回调方法
+         * 设置作用于第一次获取到集群leader节点信息时刻的{@link Runnable}回调方法
+         *
+         * @param task {@link Runnable}任务
+         */
+        private void setLeaderFirstSelectTask(Runnable task) {
+            this.leaderFirstSelectTask = task;
+        }
+
+        /**
+         * 执行作用于第一次获取到集群leader节点信息时刻的{@link Runnable}回调方法
          */
         private void onLeaderFirstSelect() {
             if (leaderFirstSelectTask != null) {
@@ -353,10 +362,10 @@ final class NovaIOClientImpl implements NovaIOClient {
          *
          * @author RealDragonking
          */
-        private class WaitMessage {
+        private class PendingMessage {
             private final ByteBuf byteBuf;
             private final AsyncFuture<?> asyncFuture;
-            private WaitMessage(ByteBuf byteBuf, AsyncFuture<?> asyncFuture) {
+            private PendingMessage(ByteBuf byteBuf, AsyncFuture<?> asyncFuture) {
                 this.byteBuf = byteBuf;
                 this.asyncFuture = asyncFuture;
             }
