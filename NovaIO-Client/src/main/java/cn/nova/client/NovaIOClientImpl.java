@@ -51,7 +51,6 @@ final class NovaIOClientImpl implements NovaIOClient {
                      int timeout,
                      int reconnectInterval) {
 
-        this.viewNodeClient = new RaftClusterClient("ViewNode-Cluster", bootstrap, addresses);
         this.alloc = ByteBufAllocator.DEFAULT;
 
         this.ioThreadGroup = ioThreadGroup;
@@ -60,6 +59,8 @@ final class NovaIOClientImpl implements NovaIOClient {
 
         this.timeout = timeout;
         this.reconnectInterval = reconnectInterval;
+
+        this.viewNodeClient = new RaftClusterClient("ViewNode-Cluster", addresses);
     }
 
     /**
@@ -128,7 +129,7 @@ final class NovaIOClientImpl implements NovaIOClient {
         private volatile long leaderTerm;
         private Channel leaderChannel;
 
-        private RaftClusterClient(String clusterName, Bootstrap bootstrap, InetSocketAddress[] addresses) {
+        private RaftClusterClient(String clusterName, InetSocketAddress[] addresses) {
             ThreadFactory timerThreadFactory = getThreadFactory(clusterName + "-Timer", false);
             int nodeNumber = addresses.length;
 
@@ -143,9 +144,9 @@ final class NovaIOClientImpl implements NovaIOClient {
 
             this.timer.newTimeout(t -> {
                 for (int i = 0; i < nodeNumber; i++) {
-                    if (channels[i] == null && channelStates[i]) {
+                    if (channels[i] == null && ! channelStates[i]) {
 
-                        channelStates[i] = false;
+                        channelStates[i] = true;
 
                         ChannelFuture future = bootstrap.connect(addresses[i]);
                         Channel channel = future.channel();
@@ -155,10 +156,10 @@ final class NovaIOClientImpl implements NovaIOClient {
                             if (f.isSuccess()) {
                                 channels[channelIdx] = channel;
                             } else {
-                                log.info("无法连接到位于 " + addresses[channelIdx] + " 的"
-                                        + clusterName + "节点，准备稍后重试...");
+                                log.info("无法连接到位于 " + addresses[channelIdx] +
+                                        " 的" + clusterName + "节点，准备稍后重试...");
                             }
-                            channelStates[channelIdx] = true;
+                            channelStates[channelIdx] = false;
                         });
                     }
                 }
@@ -170,7 +171,7 @@ final class NovaIOClientImpl implements NovaIOClient {
          */
         private void queryNewLeader() {
             if (queryLeaderState.compareAndSet(false, true)) {
-                log.info(clusterName + " leader响应超时，正在进行更新操作...");
+                log.info(clusterName + " leader节点响应超时，正在进行更新操作...");
                 leaderChannel = null;
                 queryNewLeader0();
             }
@@ -180,70 +181,72 @@ final class NovaIOClientImpl implements NovaIOClient {
          * 向所有节点发出询问消息，探测最新的leader
          */
         private void queryNewLeader0() {
-            DynamicCounter counter = new DynamicCounter() {
-                @Override
-                public void onAchieveTarget() {
-                    if (leaderChannel == null) {
-                        log.info("更新" + clusterName + " leader失败，准备稍后重试...");
-                        timer.newTimeout(t -> queryNewLeader0(), reconnectInterval, TimeUnit.MILLISECONDS);
-                    } else {
-                        log.info("成功更新" + clusterName + " leader");
-                        queryLeaderState.set(false);
-                    }
-                }
-            };
-
-            for (int i = 0; i < channels.length; i++) {
-                Channel channel = channels[i];
-                int channelIdx = i;
-
-                if (channel == null) {
-                    continue;
-                }
-
-                AsyncFuture<QueryLeaderResult> responseFuture = new AsyncFutureImpl<>(QueryLeaderResult.class);
-                long sessionId = responseFuture.getSessionId();
-
-                sessionMap.put(sessionId, responseFuture);
-
-                ByteBuf byteBuf = alloc.buffer().writerIndex(4);
-
-                writePath(byteBuf, "/query-leader");
-                byteBuf.writeLong(sessionId);
-
-                int writerIndex = byteBuf.writerIndex();
-                byteBuf.writerIndex(0)
-                        .writeInt(writerIndex - 4)
-                        .writerIndex(writerIndex);
-
-                channel.writeAndFlush(byteBuf);
-
-                counter.addTarget();
-
-                responseFuture.addListener(result -> {
-                    if (result == null) {
-                        channels[channelIdx] = null;
-                        channel.close();
-                    } else {
-                        locker.lock();
-                        if (result.isLeader() && result.getTerm() > leaderTerm) {
-                            leaderTerm = result.getTerm();
-                            leaderChannel = channel;
+            timer.newTimeout(t -> {
+                DynamicCounter counter = new DynamicCounter() {
+                    @Override
+                    public void onAchieveTarget() {
+                        if (leaderChannel == null) {
+                            log.info("更新 " + clusterName + " leader节点失败，准备稍后重试...");
+                            queryNewLeader0();
+                        } else {
+                            log.info("成功更新 " + clusterName + " leader节点");
+                            queryLeaderState.set(false);
                         }
-                        locker.unlock();
                     }
-                    counter.addCount();
-                });
+                };
 
-                timer.newTimeout(t -> {
-                    sessionMap.remove(sessionId);
-                    responseFuture.notifyResult(null);
-                }, timeout, TimeUnit.MILLISECONDS);
-            }
+                for (int i = 0; i < channels.length; i++) {
+                    Channel channel = channels[i];
+                    int channelIdx = i;
 
-            counter.determineTarget();
+                    if (channel == null) {
+                        continue;
+                    }
+
+                    AsyncFuture<QueryLeaderResult> responseFuture = new AsyncFutureImpl<>(QueryLeaderResult.class);
+                    long sessionId = responseFuture.getSessionId();
+
+                    sessionMap.put(sessionId, responseFuture);
+
+                    ByteBuf byteBuf = alloc.buffer().writerIndex(4);
+
+                    writePath(byteBuf, "/query-leader");
+                    byteBuf.writeLong(sessionId);
+
+                    int writerIndex = byteBuf.writerIndex();
+                    byteBuf.writerIndex(0)
+                            .writeInt(writerIndex - 4)
+                            .writerIndex(writerIndex);
+
+                    channel.writeAndFlush(byteBuf);
+
+                    counter.addTarget();
+
+                    responseFuture.addListener(result -> {
+                        if (result == null) {
+                            channels[channelIdx] = null;
+                            channel.close();
+                        } else {
+                            locker.lock();
+                            if (result.isLeader() && result.getTerm() > leaderTerm) {
+                                leaderTerm = result.getTerm();
+                                leaderChannel = channel;
+                            }
+                            locker.unlock();
+                        }
+                        counter.addCount();
+                    });
+
+                    timer.newTimeout(t1 -> {
+                        sessionMap.remove(sessionId);
+                        responseFuture.notifyResult(null);
+                    }, timeout, TimeUnit.MILLISECONDS);
+                }
+
+                counter.determineTarget();
+
+            }, reconnectInterval, TimeUnit.MILLISECONDS);
         }
-
     }
 
 }
