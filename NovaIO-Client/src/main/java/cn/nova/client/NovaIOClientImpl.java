@@ -171,7 +171,7 @@ final class NovaIOClientImpl implements NovaIOClient {
         }
 
         /**
-         * 尝试获取到发送{@link ByteBuf}消息的状态权限锁，如果抢锁失败则加入等候队列（不会立刻开始超时计时）。
+         * 尝试获取到控制消息发送的标志位（锁），如果标志位修改失败，则加入{@link #waitMessageQueue}等待延迟发送。
          * 请确保{@link ByteBuf}已经完成写入头部的长度字段和路径字段、sessionId
          *
          * @param byteBuf {@link ByteBuf}字节缓冲区
@@ -189,7 +189,7 @@ final class NovaIOClientImpl implements NovaIOClient {
         }
 
         /**
-         * 清空{@link #waitMessageQueue}中的所有等待发送的{@link WaitMessage}消息
+         * 如果{@link #waitMessageQueue}不为空的话，从中取出一条消息调用{@link #sendMessage0(ByteBuf, AsyncFuture)}进行发送
          */
         private void flushWaitMessage() {
             if (! waitMessageQueue.isEmpty()) {
