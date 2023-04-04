@@ -121,17 +121,19 @@ final class NovaIOClientImpl implements NovaIOClient {
     private class RaftClusterClient {
 
         private final AtomicBoolean queryLeaderState;
+        private final InetSocketAddress[] addresses;
         private final boolean[] channelStates;
         private final Channel[] channels;
         private final String clusterName;
         private final Timer timer;
         private final Lock locker;
+        private final int nodeNumber;
         private volatile long leaderTerm;
         private Channel leaderChannel;
 
         private RaftClusterClient(String clusterName, InetSocketAddress[] addresses) {
             ThreadFactory timerThreadFactory = getThreadFactory(clusterName + "-Timer", false);
-            int nodeNumber = addresses.length;
+            this.nodeNumber = addresses.length;
 
             this.queryLeaderState = new AtomicBoolean(false);
             this.timer = new HashedWheelTimer(timerThreadFactory);
@@ -141,8 +143,17 @@ final class NovaIOClientImpl implements NovaIOClient {
             this.locker = new ReentrantLock();
 
             this.clusterName = clusterName;
+            this.addresses = addresses;
 
+            delayReconnect();
+        }
+
+        /**
+         * 延迟一段时间后，发起对集群节点的重新连接
+         */
+        private void delayReconnect() {
             this.timer.newTimeout(t -> {
+
                 for (int i = 0; i < nodeNumber; i++) {
                     if (channels[i] == null && ! channelStates[i]) {
 
@@ -163,6 +174,9 @@ final class NovaIOClientImpl implements NovaIOClient {
                         });
                     }
                 }
+
+                delayReconnect();
+
             }, reconnectInterval, TimeUnit.MILLISECONDS);
         }
 
