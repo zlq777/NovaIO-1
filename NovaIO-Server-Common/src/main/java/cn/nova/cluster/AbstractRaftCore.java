@@ -445,6 +445,7 @@ public abstract class AbstractRaftCore implements RaftCore {
             if (inSyncEntryIndex > syncedEntryIndex) {
                 storage.writeEntry(syncedEntryIndex, inSyncEntry.entryData);
                 changeApplyEntryIndex(syncedEntryIndex);
+
                 applyEntry(syncedEntryIndex, inSyncEntry.entryData);
             }
         }
@@ -480,6 +481,7 @@ public abstract class AbstractRaftCore implements RaftCore {
 
                 storage.writeEntry(syncedEntryIndex, inSyncEntry.entryData);
                 changeApplyEntryIndex(syncedEntryIndex);
+
                 applyEntry(syncedEntryIndex, inSyncEntry.entryData);
             }
 
@@ -555,6 +557,7 @@ public abstract class AbstractRaftCore implements RaftCore {
 
                     storage.writeEntry(syncedEntryIndex, entryData);
                     changeApplyEntryIndex(syncedEntryIndex);
+
                     applyEntry(syncedEntryIndex, entryData);
 
                     asyncFuture.notifyResult(syncedEntryIndex);
