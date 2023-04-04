@@ -5,7 +5,7 @@ version '1.0'
 jar {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     manifest {
-        attributes 'Main-Class': 'cn.nova.NameNodeLauncher'
+        attributes 'Main-Class': 'cn.nova.ViewNodeLauncher'
     }
     from {
         (configurations.runtimeClasspath).collect {
