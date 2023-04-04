@@ -145,39 +145,43 @@ final class NovaIOClientImpl implements NovaIOClient {
             this.clusterName = clusterName;
             this.addresses = addresses;
 
-            delayReconnect();
+            tryConnect();
         }
 
         /**
          * 延迟一段时间后，发起对集群节点的重新连接
          */
         private void delayReconnect() {
-            this.timer.newTimeout(t -> {
+            this.timer.newTimeout(t -> tryConnect(), reconnectInterval, TimeUnit.MILLISECONDS);
+        }
 
-                for (int i = 0; i < nodeNumber; i++) {
-                    if (channels[i] == null && ! channelStates[i]) {
+        /**
+         * 尝试发起对集群节点的连接
+         */
+        private void tryConnect() {
 
-                        channelStates[i] = true;
+            for (int i = 0; i < nodeNumber; i++) {
+                if (channels[i] == null && ! channelStates[i]) {
 
-                        ChannelFuture future = bootstrap.connect(addresses[i]);
-                        Channel channel = future.channel();
-                        int channelIdx = i;
+                    channelStates[i] = true;
 
-                        future.addListener(f -> {
-                            if (f.isSuccess()) {
-                                channels[channelIdx] = channel;
-                            } else {
-                                log.info("无法连接到位于 " + addresses[channelIdx] +
-                                        " 的" + clusterName + "节点，准备稍后重试...");
-                            }
-                            channelStates[channelIdx] = false;
-                        });
-                    }
+                    ChannelFuture future = bootstrap.connect(addresses[i]);
+                    Channel channel = future.channel();
+                    int channelIdx = i;
+
+                    future.addListener(f -> {
+                        if (f.isSuccess()) {
+                            channels[channelIdx] = channel;
+                        } else {
+                            log.info("无法连接到位于 " + addresses[channelIdx] +
+                                    " 的" + clusterName + "节点，准备稍后重试...");
+                        }
+                        channelStates[channelIdx] = false;
+                    });
                 }
+            }
 
-                delayReconnect();
-
-            }, reconnectInterval, TimeUnit.MILLISECONDS);
+            delayReconnect();
         }
 
         /**
