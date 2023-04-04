@@ -2,13 +2,13 @@ package cn.nova.client;
 
 import cn.nova.AsyncFuture;
 import cn.nova.AsyncFutureImpl;
+import cn.nova.ByteBufMessage;
 import cn.nova.DynamicCounter;
 import cn.nova.client.response.AppendNewEntryResult;
 import cn.nova.client.response.QueryLeaderResult;
 import cn.nova.client.response.ReadEntryResult;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.EventLoopGroup;
@@ -19,6 +19,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.net.InetSocketAddress;
 import java.util.Map;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -26,7 +28,6 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static cn.nova.CommonUtils.getThreadFactory;
-import static cn.nova.CommonUtils.writePath;
 
 /**
  * {@link NovaIOClient}的默认实现类
@@ -37,10 +38,9 @@ final class NovaIOClientImpl implements NovaIOClient {
 
     private static final Logger log = LogManager.getLogger(NovaIOClientImpl.class);
     private final Map<Long, AsyncFuture<?>> sessionMap;
-    private final EventLoopGroup ioThreadGroup;
-    private final ByteBufAllocator alloc;
-    private final Bootstrap bootstrap;
     private final RaftClusterClient viewNodeClient;
+    private final EventLoopGroup ioThreadGroup;
+    private final Bootstrap bootstrap;
     private final int timeout;
     private final int reconnectInterval;
 
@@ -50,9 +50,6 @@ final class NovaIOClientImpl implements NovaIOClient {
                      Bootstrap bootstrap,
                      int timeout,
                      int reconnectInterval) {
-
-        this.alloc = ByteBufAllocator.DEFAULT;
-
         this.ioThreadGroup = ioThreadGroup;
         this.sessionMap = sessionMap;
         this.bootstrap = bootstrap;
@@ -61,6 +58,7 @@ final class NovaIOClientImpl implements NovaIOClient {
         this.reconnectInterval = reconnectInterval;
 
         this.viewNodeClient = new RaftClusterClient("ViewNode-Cluster", addresses);
+        this.viewNodeClient.tryConnect();
     }
 
     /**
@@ -71,14 +69,17 @@ final class NovaIOClientImpl implements NovaIOClient {
      */
     @Override
     public AsyncFuture<ReadEntryResult> readEntry(long entryIndex) {
-//        AsyncFuture<ReadEntryResult> asyncFuture = new AsyncFutureImpl<>(ReadEntryResult.class);
-//        long sessionId = asyncFuture.getSessionId();
-//
-//        sessionMap.put(sessionId, asyncFuture);
-//
-//        return asyncFuture;
-        viewNodeClient.queryNewLeader();
-        return null;
+        AsyncFuture<ReadEntryResult> asyncFuture = new AsyncFutureImpl<>(ReadEntryResult.class);
+        ByteBufMessage message = ByteBufMessage
+                .build("/read-entry")
+                .doWrite(byteBuf -> {
+                    byteBuf.writeLong(asyncFuture.getSessionId());
+
+                });
+
+        //
+
+        return asyncFuture;
     }
 
     /**
@@ -98,6 +99,7 @@ final class NovaIOClientImpl implements NovaIOClient {
     @Override
     public void close() {
         ioThreadGroup.shutdownGracefully();
+        viewNodeClient.close();
     }
 
     /**
@@ -120,7 +122,8 @@ final class NovaIOClientImpl implements NovaIOClient {
      */
     private class RaftClusterClient {
 
-        private final AtomicBoolean queryLeaderState;
+        private final AtomicBoolean leaderChannelState;
+        private final Queue<WaiterMessage> waiterQueue;
         private final InetSocketAddress[] addresses;
         private final boolean[] channelStates;
         private final Channel[] channels;
@@ -134,9 +137,11 @@ final class NovaIOClientImpl implements NovaIOClient {
         private RaftClusterClient(String clusterName, InetSocketAddress[] addresses) {
             ThreadFactory timerThreadFactory = getThreadFactory(clusterName + "-Timer", false);
             this.nodeNumber = addresses.length;
+            this.leaderTerm = -1L;
 
-            this.queryLeaderState = new AtomicBoolean(false);
+            this.leaderChannelState = new AtomicBoolean(false);
             this.timer = new HashedWheelTimer(timerThreadFactory);
+            this.waiterQueue = new ConcurrentLinkedQueue<>();
 
             this.channelStates = new boolean[nodeNumber];
             this.channels = new Channel[nodeNumber];
@@ -144,8 +149,50 @@ final class NovaIOClientImpl implements NovaIOClient {
 
             this.clusterName = clusterName;
             this.addresses = addresses;
+        }
 
-            tryConnect();
+        /**
+         * 尝试获取到发送{@link ByteBuf}消息的状态权限锁，如果抢锁失败则加入等候队列（不会立刻开始超时计时）。
+         * 请确保{@link ByteBuf}已经完成写入头部的长度字段和路径字段、sessionId
+         *
+         * @param byteBuf {@link ByteBuf}字节缓冲区
+         * @param asyncFuture {@link AsyncFuture}
+         */
+        private void sendMessage(ByteBuf byteBuf, AsyncFuture<?> asyncFuture) {
+            if (leaderChannelState.compareAndSet(true, false)) {
+
+                sendMessage0(byteBuf, asyncFuture);
+
+                WaiterMessage waiter;
+                while ((waiter = waiterQueue.poll()) != null) {
+                    sendMessage0(waiter.byteBuf, waiter.asyncFuture);
+                }
+
+                leaderChannelState.set(true);
+            } else {
+                WaiterMessage waiter = new WaiterMessage(byteBuf, asyncFuture);
+                waiterQueue.offer(waiter);
+            }
+        }
+
+        /**
+         * 尝试向leader节点发送一个完整的{@link ByteBuf}消息，并启动超时计时。一旦消息响应超时，
+         * 那么启动{@link #queryNewLeader()}进程
+         *
+         * @param byteBuf {@link ByteBuf}字节缓冲区
+         * @param asyncFuture {@link AsyncFuture}
+         */
+        private void sendMessage0(ByteBuf byteBuf, AsyncFuture<?> asyncFuture) {
+            long sessionId = asyncFuture.getSessionId();
+            sessionMap.put(sessionId, asyncFuture);
+
+            leaderChannel.writeAndFlush(byteBuf);
+
+            timer.newTimeout(t -> {
+                sessionMap.remove(sessionId);
+                asyncFuture.notifyResult(null);
+                queryNewLeader();
+            }, timeout, TimeUnit.MILLISECONDS);
         }
 
         /**
@@ -159,7 +206,6 @@ final class NovaIOClientImpl implements NovaIOClient {
          * 尝试发起对集群节点的连接
          */
         private void tryConnect() {
-
             for (int i = 0; i < nodeNumber; i++) {
                 if (channels[i] == null && ! channelStates[i]) {
 
@@ -180,7 +226,6 @@ final class NovaIOClientImpl implements NovaIOClient {
                     });
                 }
             }
-
             delayReconnect();
         }
 
@@ -188,7 +233,7 @@ final class NovaIOClientImpl implements NovaIOClient {
          * 尝试抢占标志锁，启动询问集群新任leader的进程
          */
         private void queryNewLeader() {
-            if (queryLeaderState.compareAndSet(false, true)) {
+            if (leaderChannelState.compareAndSet(true, false)) {
                 log.info(clusterName + " leader节点响应超时，正在进行更新操作...");
                 leaderChannel = null;
                 queryNewLeader0();
@@ -208,7 +253,7 @@ final class NovaIOClientImpl implements NovaIOClient {
                             queryNewLeader0();
                         } else {
                             log.info("成功更新 " + clusterName + " leader节点");
-                            queryLeaderState.set(false);
+                            leaderChannelState.set(true);
                         }
                     }
                 };
@@ -226,17 +271,11 @@ final class NovaIOClientImpl implements NovaIOClient {
 
                     sessionMap.put(sessionId, responseFuture);
 
-                    ByteBuf byteBuf = alloc.buffer().writerIndex(4);
+                    ByteBufMessage message = ByteBufMessage
+                            .build("/query-leader")
+                            .doWrite(byteBuf -> byteBuf.writeLong(sessionId));
 
-                    writePath(byteBuf, "/query-leader");
-                    byteBuf.writeLong(sessionId);
-
-                    int writerIndex = byteBuf.writerIndex();
-                    byteBuf.writerIndex(0)
-                            .writeInt(writerIndex - 4)
-                            .writerIndex(writerIndex);
-
-                    channel.writeAndFlush(byteBuf);
+                    channel.writeAndFlush(message.create());
 
                     counter.addTarget();
 
@@ -265,6 +304,28 @@ final class NovaIOClientImpl implements NovaIOClient {
 
             }, reconnectInterval, TimeUnit.MILLISECONDS);
         }
+
+        /**
+         * 安全且优雅地关闭此{@link RaftClusterClient}
+         */
+        private void close() {
+            timer.stop();
+        }
+
+        /**
+         * 正在等待发送的消息
+         *
+         * @author RealDragonking
+         */
+        private class WaiterMessage {
+            private final ByteBuf byteBuf;
+            private final AsyncFuture<?> asyncFuture;
+            private WaiterMessage(ByteBuf byteBuf, AsyncFuture<?> asyncFuture) {
+                this.byteBuf = byteBuf;
+                this.asyncFuture = asyncFuture;
+            }
+        }
+
     }
 
 }

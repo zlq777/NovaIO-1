@@ -15,6 +15,6 @@ public class Test {
         };
 
         NovaIOClient client = NovaIOClients.create(addresses);
-        client.readEntry(-1);
+        client.readEntry(-1L);
     }
 }

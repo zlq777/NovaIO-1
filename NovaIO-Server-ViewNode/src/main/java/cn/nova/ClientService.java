@@ -29,19 +29,16 @@ public final class ClientService {
     @PathMapping(path = "/query-leader")
     public void queryLeader(Channel channel, ByteBuf byteBuf) {
         long sessionId = byteBuf.readLong();
+        byteBuf.release();
 
-        byteBuf.clear().writerIndex(4);
+        ByteBufMessage response = ByteBufMessage
+                .build().doWrite(res -> {
+                    res.writeLong(sessionId);
+                    res.writeBoolean(raftCore.isLeader());
+                    res.writeLong(raftCore.getCurrentTerm());
+                });
 
-        byteBuf.writeLong(sessionId)
-                .writeBoolean(raftCore.isLeader())
-                .writeLong(raftCore.getCurrentTerm());
-
-        int writerIndex = byteBuf.writerIndex();
-        byteBuf.writerIndex(0)
-                .writeInt(writerIndex - 4)
-                .writerIndex(writerIndex);
-
-        channel.writeAndFlush(byteBuf);
+        channel.writeAndFlush(response.create());
     }
 
 }
