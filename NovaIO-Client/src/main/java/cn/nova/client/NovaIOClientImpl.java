@@ -5,7 +5,8 @@ import cn.nova.AsyncFutureImpl;
 import cn.nova.ByteBufMessage;
 import cn.nova.DynamicCounter;
 import cn.nova.client.response.AppendNewEntryResult;
-import cn.nova.client.response.QueryLeaderResult;
+import cn.nova.client.response.UpdateDataNodeInfoResult;
+import cn.nova.client.response.UpdateLeaderResult;
 import cn.nova.client.response.ReadEntryResult;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
@@ -20,6 +21,7 @@ import org.apache.logging.log4j.Logger;
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
@@ -37,11 +39,13 @@ import static cn.nova.CommonUtils.getThreadFactory;
 final class NovaIOClientImpl implements NovaIOClient {
 
     private static final Logger log = LogManager.getLogger(NovaIOClientImpl.class);
+    private final Map<Long, RaftClusterClient> dataNodeClientMap;
     private final Map<Long, AsyncFuture<?>> sessionMap;
     private final RaftClusterClient viewNodeClient;
     private final EventLoopGroup ioThreadGroup;
     private final Bootstrap bootstrap;
     private final int timeout;
+    private final int updateInterval;
     private final int reconnectInterval;
 
     NovaIOClientImpl(Map<Long, AsyncFuture<?>> sessionMap,
@@ -49,18 +53,21 @@ final class NovaIOClientImpl implements NovaIOClient {
                      EventLoopGroup ioThreadGroup,
                      Bootstrap bootstrap,
                      int timeout,
+                     int updateInterval,
                      int reconnectInterval) {
 
+        this.dataNodeClientMap = new ConcurrentHashMap<>();
         this.ioThreadGroup = ioThreadGroup;
         this.sessionMap = sessionMap;
         this.bootstrap = bootstrap;
         this.timeout = timeout;
+        this.updateInterval = updateInterval;
         this.reconnectInterval = reconnectInterval;
 
-        Runnable task = new DataNodeInfoSelectTask();
+        Runnable task = new UpdateDataNodeInfoTask();
         this.viewNodeClient = new RaftClusterClient("ViewNode-Cluster", addresses);
-        this.viewNodeClient.setLeaderFirstSelectTask(task);
-        this.viewNodeClient.tryConnect();
+        this.viewNodeClient.setLeaderFirstUpdateTask(task);
+        this.viewNodeClient.loopConnect();
     }
 
     /**
@@ -80,7 +87,7 @@ final class NovaIOClientImpl implements NovaIOClient {
 //                });
 //
 //        return asyncFuture;
-        viewNodeClient.queryNewLeader();
+        viewNodeClient.updateLeader();
         return null;
     }
 
@@ -105,16 +112,29 @@ final class NovaIOClientImpl implements NovaIOClient {
     }
 
     /**
-     * {@link DataNodeInfoSelectTask}需要被挂载到面向ViewNode节点集群的{@link RaftClusterClient}上，
-     * 会在第一次获取到ViewNode节点集群的leader信息时，通过{@link RaftClusterClient#onLeaderFirstSelect()}
+     * {@link UpdateDataNodeInfoTask}需要被挂载到面向ViewNode节点集群的{@link RaftClusterClient}上，
+     * 会在第一次获取到ViewNode节点集群的leader信息时，通过{@link RaftClusterClient#onLeaderFirstUpdate()}
      * 被回调执行一次，启动对DataNode节点集群们的信息动态轮询
      *
      * @author RealDragonking
      */
-    private class DataNodeInfoSelectTask implements Runnable {
+    private class UpdateDataNodeInfoTask implements Runnable {
         @Override
         public void run() {
-            log.info("第一次!");
+            AsyncFuture<UpdateDataNodeInfoResult> asyncFuture = new AsyncFutureImpl<>(UpdateDataNodeInfoResult.class);
+            long sessionId = asyncFuture.getSessionId();
+
+            ByteBufMessage message = ByteBufMessage
+                    .build("/update-datanode-info")
+                    .doWrite(byteBuf -> byteBuf.writeLong(sessionId));
+
+            viewNodeClient.sendMessage(message.create(), asyncFuture);
+
+            asyncFuture.addListener(result -> {
+                //
+            });
+
+            viewNodeClient.timer.newTimeout(t -> run(), updateInterval, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -122,7 +142,7 @@ final class NovaIOClientImpl implements NovaIOClient {
      * {@link RaftClusterClient}实现了一个能够和raft集群进行通信的、通用可靠的客户端。
      * <p>我们只会和leader节点进行读写操作，当leader节点表示自己已经失去了leader身份时，我们会使用leader节点返回的新leader的index，
      * 更新通信信道。</p>
-     * <p>如果leader节点响应超时，那么我们会通过{@link #queryNewLeader()}启动对其它节点的leader身份探测。这种探测可能会面临以下两种情况：
+     * <p>如果leader节点响应超时，那么我们会通过{@link #updateLeader()}启动对其它节点的leader身份探测。这种探测可能会面临以下两种情况：
      * <ul>
      *     <li>
      *         有节点表示自己是新任leader。这里可能会遇到任期不同的leader身份宣布，我们只信任任期最大的那个
@@ -139,30 +159,30 @@ final class NovaIOClientImpl implements NovaIOClient {
     private class RaftClusterClient {
 
         private final Queue<PendingMessage> pendingMessageQueue;
-        private final AtomicBoolean leaderChannelState;
+        private final AtomicBoolean updateLeaderState;
         private final InetSocketAddress[] addresses;
         private final boolean[] channelStates;
-        private final Lock queryLeaderLocker;
+        private final Lock updateLeaderLocker;
         private final Channel[] channels;
         private final String clusterName;
         private final Timer timer;
         private final int nodeNumber;
-        private volatile boolean leaderFirstSelect;
+        private volatile boolean leaderFirstUpdate;
         private volatile long leaderTerm;
-        private Runnable leaderFirstSelectTask;
+        private Runnable leaderFirstUpdateTask;
         private Channel leaderChannel;
 
         private RaftClusterClient(String clusterName, InetSocketAddress[] addresses) {
 
             ThreadFactory timerThreadFactory = getThreadFactory(clusterName + "-Timer", false);
             this.nodeNumber = addresses.length;
-            this.leaderFirstSelect = true;
+            this.leaderFirstUpdate = true;
             this.leaderTerm = -1L;
 
-            this.leaderChannelState = new AtomicBoolean(true);
+            this.updateLeaderState = new AtomicBoolean(true);
             this.timer = new HashedWheelTimer(timerThreadFactory);
             this.pendingMessageQueue = new ConcurrentLinkedQueue<>();
-            this.queryLeaderLocker = new ReentrantLock();
+            this.updateLeaderLocker = new ReentrantLock();
 
             this.channelStates = new boolean[nodeNumber];
             this.channels = new Channel[nodeNumber];
@@ -178,13 +198,15 @@ final class NovaIOClientImpl implements NovaIOClient {
          * @param byteBuf {@link ByteBuf}字节缓冲区
          * @param asyncFuture {@link AsyncFuture}
          */
-        private synchronized void sendMessage(ByteBuf byteBuf, AsyncFuture<?> asyncFuture) {
-            if (leaderChannelState.compareAndSet(true, false)) {
-                sendMessage0(byteBuf, asyncFuture);
-                leaderChannelState.set(true);
-            } else {
-                PendingMessage pending = new PendingMessage(byteBuf, asyncFuture);
-                pendingMessageQueue.offer(pending);
+        private void sendMessage(ByteBuf byteBuf, AsyncFuture<?> asyncFuture) {
+            synchronized (this) {
+                if (updateLeaderState.compareAndSet(true, false)) {
+                    sendMessage0(byteBuf, asyncFuture);
+                    updateLeaderState.set(true);
+                } else {
+                    PendingMessage pending = new PendingMessage(byteBuf, asyncFuture);
+                    pendingMessageQueue.offer(pending);
+                }
             }
         }
 
@@ -202,7 +224,7 @@ final class NovaIOClientImpl implements NovaIOClient {
 
         /**
          * 尝试向leader节点发送一个完整的{@link ByteBuf}消息，并启动超时计时。一旦消息响应超时，
-         * 那么启动{@link #queryNewLeader()}进程
+         * 那么启动{@link #updateLeader()}进程
          *
          * @param byteBuf {@link ByteBuf}字节缓冲区
          * @param asyncFuture {@link AsyncFuture}
@@ -215,7 +237,7 @@ final class NovaIOClientImpl implements NovaIOClient {
 
             asyncFuture.addListener(result -> {
                 if (result == null) {
-                    queryNewLeader();
+                    updateLeader();
                 }
             });
 
@@ -226,9 +248,9 @@ final class NovaIOClientImpl implements NovaIOClient {
         }
 
         /**
-         * 尝试发起对集群节点的连接
+         * 循环检测和集群节点的{@link Channel}通信信道是否活跃，并执行重连操作
          */
-        private void tryConnect() {
+        private void loopConnect() {
             for (int i = 0; i < nodeNumber; i++) {
                 if (channels[i] == null && ! channelStates[i]) {
 
@@ -248,37 +270,38 @@ final class NovaIOClientImpl implements NovaIOClient {
                     });
                 }
             }
-            timer.newTimeout(t -> tryConnect(), reconnectInterval, TimeUnit.MILLISECONDS);
+            timer.newTimeout(t -> loopConnect(), reconnectInterval, TimeUnit.MILLISECONDS);
         }
 
         /**
-         * 尝试抢占标志锁，启动询问集群新任leader的进程
+         * 尝试抢占{@link #updateLeaderState}标志锁，启动leader信息更新的进程
          */
-        private void queryNewLeader() {
-            if (leaderChannelState.compareAndSet(true, false)) {
+        private void updateLeader() {
+            if (updateLeaderState.compareAndSet(true, false)) {
                 log.info("{}-leader节点响应超时，正在进行更新操作...", clusterName);
                 leaderChannel = null;
-                queryNewLeader0();
+                updateLeader0();
             }
         }
 
         /**
-         * 向所有节点发出询问消息，探测最新的leader
+         * 具体更新leader信息。向所有{@link Channel}通信信道可用的节点，通过{@link #queryLeader(Channel, int, DynamicCounter)}
+         * 发送leader探测消息，当收到leader声明响应时，更新本地的leader节点信息
          */
-        private void queryNewLeader0() {
+        private void updateLeader0() {
             timer.newTimeout(t -> {
                 DynamicCounter counter = new DynamicCounter() {
                     @Override
                     public void onAchieveTarget() {
                         if (leaderChannel == null) {
                             log.info("{}-leader节点信息更新失败，准备稍后重试...", clusterName);
-                            queryNewLeader0();
+                            updateLeader0();
                         } else {
                             log.info("成功更新{}-leader节点信息，位于{}", clusterName, leaderChannel.remoteAddress());
-                            if (leaderFirstSelect) {
-                                onLeaderFirstSelect();
+                            if (leaderFirstUpdate) {
+                                onLeaderFirstUpdate();
                             }
-                            leaderChannelState.set(true);
+                            updateLeaderState.set(true);
                             flushPendingMessage();
                         }
                     }
@@ -286,44 +309,9 @@ final class NovaIOClientImpl implements NovaIOClient {
 
                 for (int i = 0; i < channels.length; i++) {
                     Channel channel = channels[i];
-                    int channelIdx = i;
-
-                    if (channel == null) {
-                        continue;
+                    if (channel != null) {
+                        queryLeader(channel, i, counter);
                     }
-
-                    AsyncFuture<QueryLeaderResult> responseFuture = new AsyncFutureImpl<>(QueryLeaderResult.class);
-                    long sessionId = responseFuture.getSessionId();
-
-                    sessionMap.put(sessionId, responseFuture);
-
-                    ByteBufMessage message = ByteBufMessage
-                            .build("/query-leader")
-                            .doWrite(byteBuf -> byteBuf.writeLong(sessionId));
-
-                    channel.writeAndFlush(message.create());
-
-                    counter.addTarget();
-
-                    responseFuture.addListener(result -> {
-                        if (result == null) {
-                            channels[channelIdx] = null;
-                            channel.close();
-                        } else {
-                            queryLeaderLocker.lock();
-                            if (result.isLeader() && result.getTerm() > leaderTerm) {
-                                leaderTerm = result.getTerm();
-                                leaderChannel = channel;
-                            }
-                            queryLeaderLocker.unlock();
-                        }
-                        counter.addCount();
-                    });
-
-                    timer.newTimeout(t1 -> {
-                        sessionMap.remove(sessionId);
-                        responseFuture.notifyResult(null);
-                    }, timeout, TimeUnit.MILLISECONDS);
                 }
 
                 counter.setTarget();
@@ -332,22 +320,64 @@ final class NovaIOClientImpl implements NovaIOClient {
         }
 
         /**
+         * 向目标节点发送leader探测消息，并修改对应当前探测活动的{@link DynamicCounter}的计数信息
+         *
+         * @param channel {@link Channel}通信信道
+         * @param channelIdx 节点{@link Channel}在{@link #channels}中的索引下标
+         * @param counter {@link DynamicCounter}
+         */
+        private void queryLeader(Channel channel, int channelIdx, DynamicCounter counter) {
+            AsyncFuture<UpdateLeaderResult> asyncFuture = new AsyncFutureImpl<>(UpdateLeaderResult.class);
+            long sessionId = asyncFuture.getSessionId();
+
+            sessionMap.put(sessionId, asyncFuture);
+
+            ByteBufMessage message = ByteBufMessage
+                    .build("/query-leader")
+                    .doWrite(byteBuf -> byteBuf.writeLong(sessionId));
+
+            channel.writeAndFlush(message.create());
+
+            counter.addTarget();
+
+            asyncFuture.addListener(result -> {
+                if (result == null) {
+                    channels[channelIdx] = null;
+                    channel.close();
+                } else {
+                    updateLeaderLocker.lock();
+                    if (result.isLeader() && result.getTerm() >= leaderTerm) {
+                        leaderTerm = result.getTerm();
+                        leaderChannel = channel;
+                    }
+                    updateLeaderLocker.unlock();
+                }
+                counter.addCount();
+            });
+
+            timer.newTimeout(t -> {
+                sessionMap.remove(sessionId);
+                asyncFuture.notifyResult(null);
+            }, timeout, TimeUnit.MILLISECONDS);
+        }
+
+        /**
          * 设置作用于第一次获取到集群leader节点信息时刻的{@link Runnable}回调方法
          *
          * @param task {@link Runnable}任务
          */
-        private void setLeaderFirstSelectTask(Runnable task) {
-            this.leaderFirstSelectTask = task;
+        private void setLeaderFirstUpdateTask(Runnable task) {
+            this.leaderFirstUpdateTask = task;
         }
 
         /**
          * 执行作用于第一次获取到集群leader节点信息时刻的{@link Runnable}回调方法
          */
-        private void onLeaderFirstSelect() {
-            if (leaderFirstSelectTask != null) {
-                leaderFirstSelectTask.run();
+        private void onLeaderFirstUpdate() {
+            if (leaderFirstUpdateTask != null) {
+                leaderFirstUpdateTask.run();
             }
-            leaderFirstSelect = false;
+            leaderFirstUpdate = false;
         }
 
         /**

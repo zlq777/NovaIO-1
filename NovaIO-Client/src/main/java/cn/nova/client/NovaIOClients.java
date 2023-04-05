@@ -22,6 +22,7 @@ import static cn.nova.CommonUtils.getThreadFactory;
  */
 public final class NovaIOClients {
 
+    private static final int DEFAULT_UPDATE_INTERVAL = 10000;
     private static final int DEFAULT_RECONNECT_INTERVAL = 1000;
     private static final int DEFAULT_IO_THREAD_NUMBER = 2;
     private static final int MAX_FRAME_LENGTH = 65535;
@@ -36,7 +37,7 @@ public final class NovaIOClients {
      * @return {@link NovaIOClient}
      */
     public static NovaIOClient create(List<InetSocketAddress> addressList){
-        return create(addressList, DEFAULT_IO_THREAD_NUMBER, DEFAULT_TIMEOUT, DEFAULT_RECONNECT_INTERVAL);
+        return create(addressList, DEFAULT_IO_THREAD_NUMBER, DEFAULT_TIMEOUT, DEFAULT_UPDATE_INTERVAL, DEFAULT_RECONNECT_INTERVAL);
     }
 
     /**
@@ -46,7 +47,7 @@ public final class NovaIOClients {
      * @return {@link NovaIOClient}
      */
     public static NovaIOClient create(InetSocketAddress[] addresses){
-        return create(addresses, DEFAULT_IO_THREAD_NUMBER, DEFAULT_TIMEOUT, DEFAULT_RECONNECT_INTERVAL);
+        return create(addresses, DEFAULT_IO_THREAD_NUMBER, DEFAULT_TIMEOUT, DEFAULT_UPDATE_INTERVAL, DEFAULT_RECONNECT_INTERVAL);
     }
 
     /**
@@ -55,11 +56,12 @@ public final class NovaIOClients {
      * @param addressList NovaIO视图节点的连接地址列表
      * @param ioThreadNumber io线程数量
      * @param timeout 响应超时时间
+     * @param updateInterval DataNode集群信息更新时间
      * @param reconnectInterval 重连间隔时间
      * @return {@link NovaIOClient}
      */
     public static NovaIOClient create(List<InetSocketAddress> addressList,
-                                      int ioThreadNumber, int timeout, int reconnectInterval) {
+                                      int ioThreadNumber, int timeout, int reconnectInterval, int updateInterval) {
 
         int nodeNumber = addressList.size();
         InetSocketAddress[] addresses = new InetSocketAddress[nodeNumber];
@@ -68,7 +70,7 @@ public final class NovaIOClients {
             addresses[i] = addressList.get(i);
         }
 
-        return create(addresses, ioThreadNumber, timeout, reconnectInterval);
+        return create(addresses, ioThreadNumber, timeout, reconnectInterval, updateInterval);
     }
 
     /**
@@ -77,11 +79,12 @@ public final class NovaIOClients {
      * @param addresses NovaIO视图节点的连接地址列表
      * @param ioThreadNumber io线程数量
      * @param timeout 响应超时时间
+     * @param updateInterval DataNode集群信息更新时间
      * @param reconnectInterval 重连间隔时间
      * @return {@link NovaIOClient}
      */
     public static NovaIOClient create(InetSocketAddress[] addresses,
-                                      int ioThreadNumber, int timeout, int reconnectInterval) {
+                                      int ioThreadNumber, int timeout, int updateInterval, int reconnectInterval) {
 
         EventLoopGroup ioThreadGroup = new NioEventLoopGroup(ioThreadNumber, getThreadFactory("io-thread", true));
         Map<Long, AsyncFuture<?>> sessionMap = new ConcurrentHashMap<>();
@@ -98,7 +101,7 @@ public final class NovaIOClients {
                     }
                 });
 
-        return new NovaIOClientImpl(sessionMap, addresses, ioThreadGroup, bootstrap, timeout, reconnectInterval);
+        return new NovaIOClientImpl(sessionMap, addresses, ioThreadGroup, bootstrap, timeout, updateInterval, reconnectInterval);
     }
 
 }

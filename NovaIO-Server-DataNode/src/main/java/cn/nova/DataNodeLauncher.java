@@ -62,7 +62,7 @@ public final class DataNodeLauncher {
 
         udpHandler.register(new RaftService(raftCore));
 
-        tcpHandler.register(new ClientService(raftCore, storage));
+        tcpHandler.register(new DataNodeClientService(raftCore, storage));
 
         onShutdown(() -> {
             udpService.close();

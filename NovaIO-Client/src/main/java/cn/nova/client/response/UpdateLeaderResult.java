@@ -1,16 +1,16 @@
 package cn.nova.client.response;
 
 /**
- * {@link QueryLeaderResult}是探测ViewNode中新任leader节点的响应消息
+ * {@link UpdateLeaderResult}是探测并更新ViewNode集群中新任leader节点的响应消息
  *
  * @author RealDragonking
  */
-public class QueryLeaderResult {
+public class UpdateLeaderResult {
 
     private final boolean isLeader;
     private final long term;
 
-    public QueryLeaderResult(boolean isLeader, long term) {
+    public UpdateLeaderResult(boolean isLeader, long term) {
         this.isLeader = isLeader;
         this.term = term;
     }
