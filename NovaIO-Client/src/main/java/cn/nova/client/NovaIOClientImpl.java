@@ -1,13 +1,9 @@
 package cn.nova.client;
 
 import cn.nova.AsyncFuture;
-import cn.nova.AsyncFutureImpl;
 import cn.nova.ByteBufMessage;
 import cn.nova.DynamicCounter;
-import cn.nova.client.response.AppendNewEntryResult;
-import cn.nova.client.response.UpdateDataNodeInfoResult;
-import cn.nova.client.response.UpdateLeaderResult;
-import cn.nova.client.response.ReadEntryResult;
+import cn.nova.client.response.*;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
@@ -39,7 +35,7 @@ import static cn.nova.CommonUtils.getThreadFactory;
 final class NovaIOClientImpl implements NovaIOClient {
 
     private static final Logger log = LogManager.getLogger(NovaIOClientImpl.class);
-    private final Map<Long, RaftClusterClient> dataNodeClientMap;
+    private final Map<String, RaftClusterClient> dataNodeClientMap;
     private final Map<Long, AsyncFuture<?>> sessionMap;
     private final RaftClusterClient viewNodeClient;
     private final EventLoopGroup ioThreadGroup;
@@ -71,34 +67,15 @@ final class NovaIOClientImpl implements NovaIOClient {
     }
 
     /**
-     * 根据给定的Entry序列号，从所有集群中读取对应的Entry块数据
+     * 往一个DataNode集群的信息结构体中，加入一个新节点的{@link InetSocketAddress}
      *
-     * @param entryIndex Entry序列号
+     * @param clusterName 集群名称，如果不存在会进行创建
+     * @param address     {@link InetSocketAddress}
      * @return {@link AsyncFuture}
      */
     @Override
-    public AsyncFuture<ReadEntryResult> readEntry(long entryIndex) {
-//        AsyncFuture<ReadEntryResult> asyncFuture = new AsyncFutureImpl<>(ReadEntryResult.class);
-//        ByteBufMessage message = ByteBufMessage
-//                .build("/read-entry")
-//                .doWrite(byteBuf -> {
-//                    byteBuf.writeLong(asyncFuture.getSessionId());
-//
-//                });
-//
-//        return asyncFuture;
-        viewNodeClient.updateLeader();
-        return null;
-    }
-
-    /**
-     * 将给定的Entry块数据写入所有集群，将尽最大可能在单次传输中写入更多的字节（上限32kb即32768字节）
-     *
-     * @param entryData Entry块数据
-     * @return {@link AsyncFuture}
-     */
-    @Override
-    public AsyncFuture<AppendNewEntryResult> appendNewEntry(ByteBuf entryData) {
+    public AsyncFuture<ChangeDataNodeInfoResult> addNewDataNode(String clusterName, InetSocketAddress address) {
+        AsyncFuture<ChangeDataNodeInfoResult> asyncFuture = AsyncFuture.of(ChangeDataNodeInfoResult.class);
         return null;
     }
 
@@ -121,7 +98,7 @@ final class NovaIOClientImpl implements NovaIOClient {
     private class UpdateDataNodeInfoTask implements Runnable {
         @Override
         public void run() {
-            AsyncFuture<UpdateDataNodeInfoResult> asyncFuture = new AsyncFutureImpl<>(UpdateDataNodeInfoResult.class);
+            AsyncFuture<UpdateDataNodeInfoResult> asyncFuture = AsyncFuture.of(UpdateDataNodeInfoResult.class);
             long sessionId = asyncFuture.getSessionId();
 
             ByteBufMessage message = ByteBufMessage
@@ -327,7 +304,7 @@ final class NovaIOClientImpl implements NovaIOClient {
          * @param counter {@link DynamicCounter}
          */
         private void queryLeader(Channel channel, int channelIdx, DynamicCounter counter) {
-            AsyncFuture<UpdateLeaderResult> asyncFuture = new AsyncFutureImpl<>(UpdateLeaderResult.class);
+            AsyncFuture<UpdateLeaderResult> asyncFuture = AsyncFuture.of(UpdateLeaderResult.class);
             long sessionId = asyncFuture.getSessionId();
 
             sessionMap.put(sessionId, asyncFuture);

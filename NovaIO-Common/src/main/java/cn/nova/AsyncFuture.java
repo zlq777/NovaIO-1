@@ -9,6 +9,17 @@ package cn.nova;
 public interface AsyncFuture<T> {
 
     /**
+     * 使用给定的{@link Class}类型，创建一个{@link AsyncFuture}
+     *
+     * @param typeClass {@link Class}类型
+     * @return {@link AsyncFuture}
+     * @param <T> {@link AsyncFuture}的类型
+     */
+    static <T> AsyncFuture<T> of(Class<T> typeClass) {
+        return new AsyncFutureImpl<>(typeClass);
+    }
+
+    /**
      * 获取到返回结果的类型
      *
      * @return {@link Class}

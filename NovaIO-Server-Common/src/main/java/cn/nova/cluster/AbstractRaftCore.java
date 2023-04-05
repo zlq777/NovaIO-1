@@ -2,7 +2,6 @@ package cn.nova.cluster;
 
 import cn.nova.LocalStorage;
 import cn.nova.AsyncFuture;
-import cn.nova.AsyncFutureImpl;
 import cn.nova.config.TimeConfig;
 import cn.nova.network.UDPService;
 import io.netty.buffer.ByteBuf;
@@ -587,7 +586,7 @@ public abstract class AbstractRaftCore implements RaftCore {
      */
     @Override
     public AsyncFuture<Long> onLeaderAppendEntry(ByteBuf entryData) {
-        AsyncFuture<Long> asyncFuture = new AsyncFutureImpl<>(Long.class);
+        AsyncFuture<Long> asyncFuture = AsyncFuture.of(Long.class);
         InSyncEntry newEntry = new InSyncEntry(-1L, entryData, asyncFuture);
 
         locker.lock();
