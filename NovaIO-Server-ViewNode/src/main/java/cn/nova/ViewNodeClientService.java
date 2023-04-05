@@ -3,7 +3,10 @@ package cn.nova;
 import cn.nova.cluster.RaftCore;
 import cn.nova.network.PathMapping;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
+
+import static cn.nova.CommandType.*;
 
 /**
  * {@link ViewNodeClientService}负责提供面向客户端、与全局数据视图相关的TCP服务接口
@@ -12,10 +15,12 @@ import io.netty.channel.Channel;
  */
 public final class ViewNodeClientService {
 
+    private final ByteBufAllocator alloc;
     private final RaftCore raftCore;
     private final LocalStorage storage;
 
     public ViewNodeClientService(RaftCore raftCore, LocalStorage storage) {
+        this.alloc = ByteBufAllocator.DEFAULT;
         this.raftCore = raftCore;
         this.storage = storage;
     }
@@ -42,22 +47,31 @@ public final class ViewNodeClientService {
     }
 
     /**
-     * 接收并处理请求，从当前节点处获取到DataNode节点集群的信息数据
+     * 接收并处理请求，往一个DataNode集群的信息结构体中，加入一个新节点的{@link java.net.InetSocketAddress}
      *
      * @param channel {@link Channel}通信信道
      * @param byteBuf {@link ByteBuf}字节缓冲区
      */
-    @PathMapping(path = "/update-datanode-info")
+    @PathMapping(path = "/add-datanode-info")
     public void receiveQueryDataNodeInfoRequest(Channel channel, ByteBuf byteBuf) {
         long sessionId = byteBuf.readLong();
+
+        ByteBuf entryData = alloc.buffer();
+        entryData.writeInt(ADD_NEW_DATANODE).writeBytes(byteBuf);
+
         byteBuf.release();
 
-        ByteBufMessage message = ByteBufMessage
-                .build().doWrite(res -> {
-                    res.writeLong(sessionId);
+        raftCore.onLeaderAppendEntry(entryData)
+                .addListener(entryIndex -> {
+                    if (entryIndex > -1L) {
+                        ByteBufMessage message = ByteBufMessage
+                                .build().doWrite(res -> {
+                                    res.writeLong(sessionId);
+                                    res.writeBoolean(true);
+                                });
+                        channel.writeAndFlush(message.create());
+                    }
                 });
-
-        channel.writeAndFlush(message.create());
     }
 
 }

@@ -1,6 +1,7 @@
 package cn.nova.client;
 
 import cn.nova.AsyncFuture;
+import cn.nova.client.response.ChangeDataNodeInfoResult;
 import cn.nova.client.response.UpdateLeaderResult;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
@@ -45,11 +46,20 @@ public class ResponseMsgHandler extends ChannelInboundHandlerAdapter {
         Class<?> typeClass = future.getResultType();
 
         if (typeClass == UpdateLeaderResult.class) {
+
             boolean isLeader = byteBuf.readBoolean();
             long term = byteBuf.readLong();
             UpdateLeaderResult result = new UpdateLeaderResult(isLeader, term);
 
             ((AsyncFuture<UpdateLeaderResult>)future).notifyResult(result);
+
+        } else if (typeClass == ChangeDataNodeInfoResult.class) {
+
+            boolean isSuccess = byteBuf.readBoolean();
+            ChangeDataNodeInfoResult result = new ChangeDataNodeInfoResult(isSuccess);
+
+            ((AsyncFuture<ChangeDataNodeInfoResult>)future).notifyResult(result);
+
         }
     }
 

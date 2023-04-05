@@ -30,14 +30,14 @@ public final class CommonUtils {
     }
 
     /**
-     * 将path的长度和内容写入此{@link ByteBuf}
+     * 将字符串的长度和内容写入此{@link ByteBuf}
      *
      * @param byteBuf {@link ByteBuf}字节缓冲区
-     * @param path 映射路径
+     * @param charSequence 字符串内容
      */
-    public static void writePath(ByteBuf byteBuf, String path) {
+    public static void writeCharSequence(ByteBuf byteBuf, CharSequence charSequence) {
         int writerIdx = byteBuf.writerIndex() + 4;
-        int pathLen = byteBuf.writerIndex(writerIdx).writeCharSequence(path, StandardCharsets.UTF_8);
+        int pathLen = byteBuf.writerIndex(writerIdx).writeCharSequence(charSequence, StandardCharsets.UTF_8);
         byteBuf.writerIndex(writerIdx - 4)
                 .writeInt(pathLen)
                 .writerIndex(writerIdx + pathLen);

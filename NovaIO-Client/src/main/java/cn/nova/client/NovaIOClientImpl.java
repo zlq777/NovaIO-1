@@ -26,6 +26,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static cn.nova.CommonUtils.getThreadFactory;
+import static cn.nova.CommonUtils.writeCharSequence;
 
 /**
  * {@link NovaIOClient}的默认实现类
@@ -64,6 +65,7 @@ final class NovaIOClientImpl implements NovaIOClient {
         this.viewNodeClient = new RaftClusterClient("ViewNode-Cluster", addresses);
         this.viewNodeClient.setLeaderFirstUpdateTask(task);
         this.viewNodeClient.loopConnect();
+        this.viewNodeClient.updateLeader();
     }
 
     /**
@@ -76,7 +78,22 @@ final class NovaIOClientImpl implements NovaIOClient {
     @Override
     public AsyncFuture<ChangeDataNodeInfoResult> addNewDataNode(String clusterName, InetSocketAddress address) {
         AsyncFuture<ChangeDataNodeInfoResult> asyncFuture = AsyncFuture.of(ChangeDataNodeInfoResult.class);
-        return null;
+        long sessionId = asyncFuture.getSessionId();
+
+        String ipAddress = address.getAddress().getHostAddress();
+        int port = address.getPort();
+
+        ByteBufMessage message = ByteBufMessage
+                .build("/add-datanode-info")
+                .doWrite(byteBuf -> {
+                    byteBuf.writeLong(sessionId);
+                    writeCharSequence(byteBuf, clusterName);
+                    writeCharSequence(byteBuf, ipAddress);
+                    byteBuf.writeInt(port);
+                });
+
+        viewNodeClient.sendMessage(message.create(), asyncFuture);
+        return asyncFuture;
     }
 
     /**
@@ -98,18 +115,18 @@ final class NovaIOClientImpl implements NovaIOClient {
     private class UpdateDataNodeInfoTask implements Runnable {
         @Override
         public void run() {
-            AsyncFuture<UpdateDataNodeInfoResult> asyncFuture = AsyncFuture.of(UpdateDataNodeInfoResult.class);
-            long sessionId = asyncFuture.getSessionId();
-
-            ByteBufMessage message = ByteBufMessage
-                    .build("/update-datanode-info")
-                    .doWrite(byteBuf -> byteBuf.writeLong(sessionId));
-
-            viewNodeClient.sendMessage(message.create(), asyncFuture);
-
-            asyncFuture.addListener(result -> {
-                //
-            });
+//            AsyncFuture<UpdateDataNodeInfoResult> asyncFuture = AsyncFuture.of(UpdateDataNodeInfoResult.class);
+//            long sessionId = asyncFuture.getSessionId();
+//
+//            ByteBufMessage message = ByteBufMessage
+//                    .build("/update-datanode-info")
+//                    .doWrite(byteBuf -> byteBuf.writeLong(sessionId));
+//
+//            viewNodeClient.sendMessage(message.create(), asyncFuture);
+//
+//            asyncFuture.addListener(result -> {
+//
+//            });
 
             viewNodeClient.timer.newTimeout(t -> run(), updateInterval, TimeUnit.MILLISECONDS);
         }
@@ -117,9 +134,8 @@ final class NovaIOClientImpl implements NovaIOClient {
 
     /**
      * {@link RaftClusterClient}实现了一个能够和raft集群进行通信的、通用可靠的客户端。
-     * <p>我们只会和leader节点进行读写操作，当leader节点表示自己已经失去了leader身份时，我们会使用leader节点返回的新leader的index，
-     * 更新通信信道。</p>
-     * <p>如果leader节点响应超时，那么我们会通过{@link #updateLeader()}启动对其它节点的leader身份探测。这种探测可能会面临以下两种情况：
+     * <p>我们只会和leader节点进行读写操作，当leader节点响应超时，我们会通过{@link #updateLeader()}启动对其它节点的leader身份探测。
+     * 这种探测可能会面临以下两种情况：
      * <ul>
      *     <li>
      *         有节点表示自己是新任leader。这里可能会遇到任期不同的leader身份宣布，我们只信任任期最大的那个

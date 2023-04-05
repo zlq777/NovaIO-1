@@ -7,6 +7,12 @@ import cn.nova.network.UDPService;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.util.Timer;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.nio.charset.StandardCharsets;
+
+import static cn.nova.CommandType.*;
 
 /**
  * {@link ViewNodeRaftCore}给出了ViewNode节点的EntryData应用逻辑
@@ -14,6 +20,8 @@ import io.netty.util.Timer;
  * @author RealDragonking
  */
 public class ViewNodeRaftCore extends AbstractRaftCore {
+
+    private static final Logger log = LogManager.getLogger(ViewNodeRaftCore.class);
 
     public ViewNodeRaftCore(ClusterInfo clusterInfo,
                             ByteBufAllocator alloc,
@@ -33,7 +41,13 @@ public class ViewNodeRaftCore extends AbstractRaftCore {
      */
     @Override
     public void applyEntry(long entryIndex, ByteBuf entryData) {
-
+        int commandType = entryData.readInt();
+        switch (commandType) {
+            case ADD_NEW_DATANODE :
+                log.info(entryData.toString(StandardCharsets.UTF_8));
+                break;
+        }
+        entryData.release();
     }
 
 }
