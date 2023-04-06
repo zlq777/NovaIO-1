@@ -80,10 +80,9 @@ public final class ViewNodeClientService {
 
         byteBuf.release();
 
-        ByteBufMessage message = ByteBufMessage
-                .build().doWrite(msg -> {
-                    msg.writeLong(sessionId);
-                });
+        ByteBufMessage message = ByteBufMessage.build().doWrite(msg -> {
+            msg.writeLong(sessionId);
+        });
 
         channel.writeAndFlush(message.create());
     }
