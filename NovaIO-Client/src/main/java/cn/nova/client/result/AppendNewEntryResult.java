@@ -1,4 +1,4 @@
-package cn.nova.client.response;
+package cn.nova.client.result;
 
 /**
  * {@link AppendNewEntryResult}是写入Entry数据的响应响应

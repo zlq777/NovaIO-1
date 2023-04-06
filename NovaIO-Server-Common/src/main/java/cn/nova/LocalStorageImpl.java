@@ -1,6 +1,7 @@
 package cn.nova;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.util.concurrent.FastThreadLocal;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
@@ -15,8 +16,9 @@ import static cn.nova.CommonUtils.*;
 public class LocalStorageImpl implements LocalStorage {
 
     private final RocksDB rocksDB;
-    private final FastThreadLocal<byte[]> longBucket;
-    private final FastThreadLocal<byte[]> entryBucket;
+    private final FastThreadLocal<byte[]> keyBucket;
+    private final FastThreadLocal<byte[]> valueBucket;
+    private final ByteBufAllocator alloc;
 
     public LocalStorageImpl() throws Exception {
         try (Options options = new Options()) {
@@ -24,8 +26,9 @@ public class LocalStorageImpl implements LocalStorage {
             this.rocksDB = RocksDB.open(options, "./data");
         }
 
-        this.longBucket = getByteBucket(8);
-        this.entryBucket = getByteBucket(32768);
+        this.keyBucket = getByteBucket(4096);
+        this.valueBucket = getByteBucket(32768);
+        this.alloc = ByteBufAllocator.DEFAULT;
     }
 
     /**
@@ -37,14 +40,15 @@ public class LocalStorageImpl implements LocalStorage {
      */
     @Override
     public long readLong(String key, long defaultVal) {
-        byte[] bucket = longBucket.get();
+        byte[] keyBytes = key.getBytes();
+        byte[] valueBucket = this.valueBucket.get();
 
         try {
-            if (rocksDB.get(key.getBytes(), bucket) > -1) {
-                return parseByteToLong(bucket);
+            if (rocksDB.get(keyBytes, 0, keyBytes.length, valueBucket, 0, 8) > -1) {
+                return parseByteToLong(valueBucket);
             } else {
-                parseLongToByte(bucket, defaultVal);
-                rocksDB.put(key.getBytes(), bucket);
+                parseLongToByte(valueBucket, defaultVal);
+                rocksDB.put(keyBytes, 0, keyBytes.length, valueBucket, 0, 8);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -61,73 +65,133 @@ public class LocalStorageImpl implements LocalStorage {
      */
     @Override
     public void writeLong(String key, long value) {
-        byte[] bucket = longBucket.get();
+        byte[] keyBytes = key.getBytes();
+        byte[] valueBucket = this.valueBucket.get();
 
         try {
-            parseLongToByte(bucket, value);
-            rocksDB.put(key.getBytes(), bucket);
+            parseLongToByte(valueBucket, value);
+            rocksDB.put(keyBytes, 0, keyBytes.length, valueBucket, 0, 8);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
     /**
-     * 从硬盘中读取Entry类型的数据，上限为32KB，并写入{@link ByteBuf}字节缓冲区中
+     * 从硬盘中读取Entry类型的数据，并写入{@link ByteBuf}字节缓冲区中返回
      *
-     * @param entryIndex Entry索引
+     * @param key {@link String}类型的键
+     * @return {@link ByteBuf}
+     */
+    @Override
+    public ByteBuf readBytes(String key) {
+        ByteBuf byteBuf = alloc.buffer();
+        readBytes(key, byteBuf);
+        return byteBuf;
+    }
+
+    /**
+     * 从硬盘中读取字节数据，并写入给定的{@link ByteBuf}字节缓冲区中
+     *
+     * @param key     {@link String}类型的键
      * @param byteBuf {@link ByteBuf}
      */
     @Override
-    public void readEntry(long entryIndex, ByteBuf byteBuf) {
-        byte[] longBucket = this.longBucket.get();
-        byte[] entryBucket = this.entryBucket.get();
+    public boolean readBytes(String key, ByteBuf byteBuf) {
+        byte[] keyBytes = key.getBytes();
+        byte[] valueBytes = this.valueBucket.get();
 
         try {
-            parseLongToByte(longBucket, entryIndex);
-            rocksDB.get(longBucket, entryBucket);
-            byteBuf.writeBytes(entryBucket);
+            int len = rocksDB.get(keyBytes, 0, keyBytes.length, valueBytes, 0, valueBytes.length);
+            if (len > -1) {
+                byteBuf.writeBytes(valueBytes, 0, len);
+                return true;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return false;
+    }
+
+    /**
+     * 往硬盘中写入{@link ByteBuf}字节缓冲区中的字节数据，这不会增加readerIndex
+     *
+     * @param key     {@link String}类型的键
+     * @param byteBuf {@link ByteBuf}字节缓冲区
+     */
+    @Override
+    public void writeBytes(String key, ByteBuf byteBuf) {
+        byte[] keyBytes = key.getBytes();
+        byte[] valueBytes = this.valueBucket.get();
+
+        try {
+            int readerIndex = byteBuf.readerIndex();
+            int length = byteBuf.readableBytes();
+            byteBuf.readBytes(valueBytes, 0, length);
+            byteBuf.readerIndex(readerIndex);
+
+            rocksDB.put(keyBytes, 0, 8, valueBytes, 0, length);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
     /**
-     * 从{@link ByteBuf}字节缓冲区中读取Entry类型的数据,统一为32KB，并写入硬盘中
+     * 从硬盘中读取字节数据，并写入{@link ByteBuf}字节缓冲区中返回
      *
-     * @param entryIndex Entry索引
+     * @param key long类型的键
+     * @return {@link ByteBuf}
+     */
+    @Override
+    public ByteBuf readBytes(long key) {
+        throw new UnsupportedOperationException();
+    }
+
+    /**
+     * 从硬盘中读取字节数据，并写入给定的{@link ByteBuf}字节缓冲区中
+     *
+     * @param key     long类型的键
      * @param byteBuf {@link ByteBuf}
      */
     @Override
-    public void writeEntry(long entryIndex, ByteBuf byteBuf) {
-        byte[] longBucket = this.longBucket.get();
-        byte[] entryBucket = this.entryBucket.get();
+    public boolean readBytes(long key, ByteBuf byteBuf) {
+        byte[] keyBytes = this.keyBucket.get();
+        byte[] valueBytes = this.valueBucket.get();
 
         try {
-            parseLongToByte(longBucket, entryIndex);
+            parseLongToByte(keyBytes, key);
+            int len = rocksDB.get(keyBytes, 0, 8, valueBytes, 0, valueBytes.length);
+            if (len > -1) {
+                byteBuf.writeBytes(valueBytes, 0, len);
+                return true;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return false;
+    }
+
+    /**
+     * 往硬盘中写入{@link ByteBuf}字节缓冲区中的字节数据，这不会增加readerIndex
+     *
+     * @param key     long类型的键
+     * @param byteBuf {@link ByteBuf}字节缓冲区
+     */
+    @Override
+    public void writeBytes(long key, ByteBuf byteBuf) {
+        byte[] keyBytes = this.keyBucket.get();
+        byte[] valueBytes = this.valueBucket.get();
+
+        try {
+            parseLongToByte(keyBytes, key);
 
             int readerIndex = byteBuf.readerIndex();
             int length = byteBuf.readableBytes();
-            byteBuf.readBytes(entryBucket, 0, length);
+            byteBuf.readBytes(valueBytes, 0, length);
             byteBuf.readerIndex(readerIndex);
 
-            rocksDB.put(longBucket, entryBucket);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    /**
-     * 使用给定的索引删除对应Entry类型的数据
-     *
-     * @param entryIndex Entry索引
-     */
-    @Override
-    public void removeEntry(long entryIndex) {
-        byte[] longBucket = this.longBucket.get();
-
-        try {
-            parseLongToByte(longBucket, entryIndex);
-            rocksDB.delete(longBucket);
+            rocksDB.put(keyBytes, 0, 8, valueBytes, 0, length);
         } catch (Exception e) {
             e.printStackTrace();
         }

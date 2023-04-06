@@ -1,4 +1,4 @@
-package cn.nova.client.response;
+package cn.nova.client.result;
 
 import io.netty.buffer.ByteBuf;
 

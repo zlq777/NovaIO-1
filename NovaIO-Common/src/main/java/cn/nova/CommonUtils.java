@@ -30,7 +30,7 @@ public final class CommonUtils {
     }
 
     /**
-     * 将字符串的长度和内容写入此{@link ByteBuf}
+     * 把字符串的长度和内容写入此{@link ByteBuf}
      *
      * @param byteBuf {@link ByteBuf}字节缓冲区
      * @param string {@link String}

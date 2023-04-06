@@ -3,7 +3,7 @@ package cn.nova.client;
 import cn.nova.AsyncFuture;
 import cn.nova.ByteBufMessage;
 import cn.nova.DynamicCounter;
-import cn.nova.client.response.*;
+import cn.nova.client.result.*;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
@@ -114,18 +114,18 @@ final class NovaIOClientImpl implements NovaIOClient {
     private class UpdateDataNodeInfoTask implements Runnable {
         @Override
         public void run() {
-//            AsyncFuture<UpdateDataNodeInfoResult> asyncFuture = AsyncFuture.of(UpdateDataNodeInfoResult.class);
-//            long sessionId = asyncFuture.getSessionId();
-//
-//            ByteBufMessage message = ByteBufMessage
-//                    .build("/update-datanode-info")
-//                    .doWrite(byteBuf -> byteBuf.writeLong(sessionId));
-//
-//            viewNodeClient.sendMessage(message.create(), asyncFuture);
-//
-//            asyncFuture.addListener(result -> {
-//
-//            });
+            AsyncFuture<QueryDataNodeInfoResult> asyncFuture = AsyncFuture.of(QueryDataNodeInfoResult.class);
+            long sessionId = asyncFuture.getSessionId();
+
+            ByteBufMessage message = ByteBufMessage
+                    .build("/query-datanode-info")
+                    .doWrite(byteBuf -> byteBuf.writeLong(sessionId));
+
+            viewNodeClient.sendMessage(message.create(), asyncFuture);
+
+            asyncFuture.addListener(result -> {
+
+            });
 
             viewNodeClient.timer.newTimeout(t -> run(), updateInterval, TimeUnit.MILLISECONDS);
         }
@@ -319,7 +319,7 @@ final class NovaIOClientImpl implements NovaIOClient {
          * @param counter {@link DynamicCounter}
          */
         private void queryLeader(Channel channel, int channelIdx, DynamicCounter counter) {
-            AsyncFuture<UpdateLeaderResult> asyncFuture = AsyncFuture.of(UpdateLeaderResult.class);
+            AsyncFuture<QueryLeaderResult> asyncFuture = AsyncFuture.of(QueryLeaderResult.class);
             long sessionId = asyncFuture.getSessionId();
 
             sessionMap.put(sessionId, asyncFuture);

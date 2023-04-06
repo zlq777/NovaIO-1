@@ -17,12 +17,10 @@ public final class ViewNodeClientService {
 
     private final ByteBufAllocator alloc;
     private final RaftCore raftCore;
-    private final LocalStorage storage;
 
-    public ViewNodeClientService(RaftCore raftCore, LocalStorage storage) {
+    public ViewNodeClientService(RaftCore raftCore) {
         this.alloc = ByteBufAllocator.DEFAULT;
         this.raftCore = raftCore;
-        this.storage = storage;
     }
 
     /**
@@ -61,17 +59,32 @@ public final class ViewNodeClientService {
 
         byteBuf.release();
 
-        raftCore.onLeaderAppendEntry(entryData)
-                .addListener(entryIndex -> {
-                    if (entryIndex > -1L) {
-                        ByteBufMessage message = ByteBufMessage
-                                .build().doWrite(res -> {
-                                    res.writeLong(sessionId);
-                                    res.writeBoolean(true);
-                                });
-                        channel.writeAndFlush(message.create());
+        raftCore.appendEntryOnLeaderState(entryData)
+                .addListener(res -> {
+                    if (res != null) {
+                        channel.writeAndFlush(res);
                     }
                 });
+    }
+
+    /**
+     * 接收并处理请求，查询所有的DataNode集群的信息结构体
+     *
+     * @param channel {@link Channel}通信信道
+     * @param byteBuf {@link ByteBuf}字节缓冲区
+     */
+    @PathMapping(path = "/query-datanode-info")
+    public void receiveQueryDataNodeInfoRequest(Channel channel, ByteBuf byteBuf) {
+        long sessionId = byteBuf.readLong();
+
+        byteBuf.release();
+
+        ByteBufMessage message = ByteBufMessage
+                .build().doWrite(res -> {
+                    res.writeLong(sessionId);
+                });
+
+        channel.writeAndFlush(message.create());
     }
 
 }

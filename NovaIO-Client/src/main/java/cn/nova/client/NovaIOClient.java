@@ -1,7 +1,7 @@
 package cn.nova.client;
 
 import cn.nova.AsyncFuture;
-import cn.nova.client.response.ChangeDataNodeInfoResult;
+import cn.nova.client.result.ChangeDataNodeInfoResult;
 
 import java.net.InetSocketAddress;
 

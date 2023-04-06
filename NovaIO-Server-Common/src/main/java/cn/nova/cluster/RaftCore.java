@@ -71,17 +71,21 @@ public interface RaftCore {
      * 作为leader节点，把数据同步写入集群大多数节点
      *
      * @param entryData 准备进行集群大多数确认的新Entry数据
-     * @return 异步返回写入数据的EntryIndex，为-1时表示写入同步失败
+     * @return 异步返回ByteBuf模式的标准响应体，这样的设计可以让{@link #applyEntry(boolean, long, ByteBuf)}
+     * 的子类实现给出动态灵活的消息响应拓展
      */
-    AsyncFuture<Long> onLeaderAppendEntry(ByteBuf entryData);
+    AsyncFuture<ByteBuf> appendEntryOnLeaderState(ByteBuf entryData);
 
     /**
-     * 应用已经完成集群多数派写入的Entry数据
+     * 应用已经完成集群多数派写入的Entry数据。leader节点需要返回{@link ByteBuf}模式的标准响应体
+     * （即在写入了头部长度、session字段的{@link ByteBuf}）
      *
+     * @param isLeader 当前节点是否作为leader节点完成了这一Entry数据的同步
      * @param entryIndex 已经完成集群多数派写入的Entry序列号
      * @param entryData 已经完成集群多数派写入的Entry数据
+     * @return 异步返回的ByteBuf模式的标准响应体
      */
-    void applyEntry(long entryIndex, ByteBuf entryData);
+    ByteBuf applyEntry(boolean isLeader, long entryIndex, ByteBuf entryData);
 
     /**
      * 获取到当前节点是否是Leader身份

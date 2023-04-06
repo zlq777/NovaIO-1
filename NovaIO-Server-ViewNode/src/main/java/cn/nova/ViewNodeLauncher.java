@@ -61,7 +61,7 @@ public final class ViewNodeLauncher {
 
         udpHandler.register(new RaftService(raftCore));
 
-        tcpHandler.register(new ViewNodeClientService(raftCore, storage));
+        tcpHandler.register(new ViewNodeClientService(raftCore));
 
         onShutdown(() -> {
             udpService.close();

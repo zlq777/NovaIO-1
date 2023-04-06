@@ -1,4 +1,4 @@
-package cn.nova.client.response;
+package cn.nova.client.result;
 
 /**
  * {@link ChangeDataNodeInfoResult}是修改DataNode集群信息结构体的响应结果，涉及到往
