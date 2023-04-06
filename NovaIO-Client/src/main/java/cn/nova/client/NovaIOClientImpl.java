@@ -84,11 +84,11 @@ final class NovaIOClientImpl implements NovaIOClient {
 
         ByteBufMessage message = ByteBufMessage
                 .build("/add-datanode-info")
-                .doWrite(byteBuf -> {
-                    byteBuf.writeLong(sessionId);
-                    writeString(byteBuf, clusterName);
-                    writeString(byteBuf, ipAddress);
-                    byteBuf.writeInt(port);
+                .doWrite(msg -> {
+                    msg.writeLong(sessionId);
+                    writeString(msg, clusterName);
+                    writeString(msg, ipAddress);
+                    msg.writeInt(port);
                 });
 
         viewNodeClient.sendMessage(message.create(), asyncFuture);
@@ -119,7 +119,7 @@ final class NovaIOClientImpl implements NovaIOClient {
 
             ByteBufMessage message = ByteBufMessage
                     .build("/query-datanode-info")
-                    .doWrite(byteBuf -> byteBuf.writeLong(sessionId));
+                    .doWrite(msg -> msg.writeLong(sessionId));
 
             viewNodeClient.sendMessage(message.create(), asyncFuture);
 

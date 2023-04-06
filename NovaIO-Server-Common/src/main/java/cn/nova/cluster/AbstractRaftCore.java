@@ -581,12 +581,13 @@ public abstract class AbstractRaftCore implements RaftCore {
             if (pendingEntry != null && syncedEntryIndex == pendingEntryIndex) {
                 if (++ syncedNodeNumber == majority) {
                     ByteBuf entryData = pendingEntry.entryData;
-                    AsyncFuture<ByteBuf> asyncFuture = pendingEntry.asyncFuture;
+                    AsyncFuture<Object> asyncFuture = pendingEntry.asyncFuture;
 
                     storage.writeBytes(pendingEntryIndex, entryData);
                     changeApplyEntryIndex(pendingEntryIndex);
 
-                    asyncFuture.notifyResult(applyEntry(true, pendingEntryIndex, entryData));
+                    Object result = applyEntry(true, pendingEntryIndex, entryData);
+                    asyncFuture.notifyResult(result);
 
                     if ((pendingEntry = pendingEntryQueue.poll()) != null) {
                         syncedNodeNumber = 1;
@@ -608,12 +609,12 @@ public abstract class AbstractRaftCore implements RaftCore {
      * 作为leader节点，把数据同步写入集群大多数节点
      *
      * @param entryData 准备进行集群大多数确认的新Entry数据
-     * @return 异步返回ByteBuf模式的标准响应体，这样的设计可以让{@link #applyEntry(boolean, long, ByteBuf)}
+     * @return 异步返回在applyEntry中封装好的数据结构体，这样的设计可以让{@link #applyEntry(boolean, long, ByteBuf)}
      * 的子类实现给出动态灵活的消息响应拓展
      */
     @Override
-    public AsyncFuture<ByteBuf> appendEntryOnLeaderState(ByteBuf entryData) {
-        AsyncFuture<ByteBuf> asyncFuture = AsyncFuture.of(ByteBuf.class);
+    public AsyncFuture<Object> appendEntryOnLeaderState(ByteBuf entryData) {
+        AsyncFuture<Object> asyncFuture = AsyncFuture.of(Object.class);
         PendingEntry newEntry = new PendingEntry(entryData, asyncFuture);
 
         locker.lock();
@@ -663,8 +664,8 @@ public abstract class AbstractRaftCore implements RaftCore {
      */
     private static class PendingEntry {
         private final ByteBuf entryData;
-        private final AsyncFuture<ByteBuf> asyncFuture;
-        private PendingEntry(ByteBuf entryData, AsyncFuture<ByteBuf> asyncFuture) {
+        private final AsyncFuture<Object> asyncFuture;
+        private PendingEntry(ByteBuf entryData, AsyncFuture<Object> asyncFuture) {
             this.entryData = entryData;
             this.asyncFuture = asyncFuture;
         }

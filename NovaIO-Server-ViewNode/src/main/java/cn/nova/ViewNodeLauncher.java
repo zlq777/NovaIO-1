@@ -50,7 +50,7 @@ public final class ViewNodeLauncher {
                 tickTime,
                 TimeUnit.MILLISECONDS);
 
-        RaftCore raftCore = new ViewNodeRaftCore(
+        ViewNodeRaftCore raftCore = new ViewNodeRaftCore(
                 clusterInfo,
                 ByteBufAllocator.DEFAULT,
                 timeConfig,
