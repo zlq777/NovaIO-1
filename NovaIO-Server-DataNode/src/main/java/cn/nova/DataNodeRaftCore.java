@@ -26,16 +26,16 @@ public class DataNodeRaftCore extends AbstractRaftCore {
     }
 
     /**
-     * 应用已经完成集群多数派写入的Entry数据。leader节点需要返回{@link ByteBuf}模式的标准响应体
-     * （即在写入了头部长度、session字段的{@link ByteBuf}）
+     * 应用已经完成集群多数派写入的Entry数据。leader节点需要返回响应数据结构体
      *
-     * @param isLeader   当前节点是否作为leader节点完成了这一Entry数据的同步
-     * @param entryIndex 已经完成集群多数派写入的Entry序列号
-     * @param entryData  已经完成集群多数派写入的Entry数据
+     * @param isLeader    当前节点是否作为leader节点完成了这一Entry数据的同步
+     * @param entryIndex  已经完成集群多数派写入的Entry序列号
+     * @param entryData   已经完成集群多数派写入的Entry数据
+     * @param asyncFuture {@link AsyncFuture}
      */
     @Override
-    public ByteBuf applyEntry(boolean isLeader, long entryIndex, ByteBuf entryData) {
-        return null;
+    public void applyEntry(boolean isLeader, long entryIndex, ByteBuf entryData, AsyncFuture<?> asyncFuture) {
+
     }
 
 }

@@ -58,7 +58,8 @@ public final class ViewNodeClientService {
 
         byteBuf.release();
 
-        raftCore.appendEntryOnLeaderState(entryData).addListener(result -> {
+        AsyncFuture<Long> asyncFuture = raftCore.appendEntryOnLeaderState(entryData);
+        asyncFuture.addListener(result -> {
             if (result != null) {
                 ByteBufMessage message = ByteBufMessage.build().doWrite(msg -> {
                     msg.writeLong(sessionId);

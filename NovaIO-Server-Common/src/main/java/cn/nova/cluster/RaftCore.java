@@ -71,10 +71,9 @@ public interface RaftCore {
      * 作为leader节点，把数据同步写入集群大多数节点
      *
      * @param entryData 准备进行集群大多数确认的新Entry数据
-     * @return 异步返回在applyEntry中封装好的数据结构体，这样的设计可以让{@link #applyEntry(boolean, long, ByteBuf)}
-     * 的子类实现给出动态灵活的消息响应拓展
+     * @return {@link AsyncFuture}
      */
-    AsyncFuture<Object> appendEntryOnLeaderState(ByteBuf entryData);
+    <T> AsyncFuture<T> appendEntryOnLeaderState(ByteBuf entryData);
 
     /**
      * 应用已经完成集群多数派写入的Entry数据。leader节点需要返回响应数据结构体
@@ -82,9 +81,9 @@ public interface RaftCore {
      * @param isLeader 当前节点是否作为leader节点完成了这一Entry数据的同步
      * @param entryIndex 已经完成集群多数派写入的Entry序列号
      * @param entryData 已经完成集群多数派写入的Entry数据
-     * @return 响应数据结构体
+     * @param asyncFuture {@link AsyncFuture}
      */
-    Object applyEntry(boolean isLeader, long entryIndex, ByteBuf entryData);
+    void applyEntry(boolean isLeader, long entryIndex, ByteBuf entryData, AsyncFuture<?> asyncFuture);
 
     /**
      * 获取到当前节点是否是Leader身份

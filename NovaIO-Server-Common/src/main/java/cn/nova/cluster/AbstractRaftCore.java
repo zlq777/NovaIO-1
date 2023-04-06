@@ -22,8 +22,8 @@ import java.util.concurrent.locks.ReentrantLock;
 import static cn.nova.CommonUtils.*;
 
 /**
- * 实现了{@link RaftCore}的核心算法逻辑，还需要子类对{@link RaftCore#applyEntry(boolean, long, ByteBuf)}也就是EntryData的应用逻辑
- * 给出具体实现
+ * 实现了{@link RaftCore}的核心算法逻辑，还需要子类对{@link RaftCore#applyEntry(boolean, long, ByteBuf, AsyncFuture)}
+ * 也就是EntryData的应用逻辑给出具体实现
  *
  * @author RealDragonking
  */
@@ -451,7 +451,7 @@ public abstract class AbstractRaftCore implements RaftCore {
                 storage.writeBytes(pendingEntryIndex, pendingEntryData);
                 changeApplyEntryIndex(pendingEntryIndex);
 
-                applyEntry(false, pendingEntryIndex, pendingEntryData);
+                applyEntry(false, pendingEntryIndex, pendingEntryData, null);
             }
             this.pendingEntry = null;
         }
@@ -487,7 +487,7 @@ public abstract class AbstractRaftCore implements RaftCore {
                     storage.writeBytes(pendingEntryIndex, pendingEntryData);
                     changeApplyEntryIndex(pendingEntryIndex);
 
-                    applyEntry(false, pendingEntryIndex, pendingEntryData);
+                    applyEntry(false, pendingEntryIndex, pendingEntryData, null);
 
                     pendingEntry = new PendingEntry(entryData, null);
                     pendingEntryIndex = entryIndex;
@@ -581,13 +581,12 @@ public abstract class AbstractRaftCore implements RaftCore {
             if (pendingEntry != null && syncedEntryIndex == pendingEntryIndex) {
                 if (++ syncedNodeNumber == majority) {
                     ByteBuf entryData = pendingEntry.entryData;
-                    AsyncFuture<Object> asyncFuture = pendingEntry.asyncFuture;
+                    AsyncFuture<?> asyncFuture = pendingEntry.asyncFuture;
 
                     storage.writeBytes(pendingEntryIndex, entryData);
                     changeApplyEntryIndex(pendingEntryIndex);
 
-                    Object result = applyEntry(true, pendingEntryIndex, entryData);
-                    asyncFuture.notifyResult(result);
+                    applyEntry(true, pendingEntryIndex, entryData, asyncFuture);
 
                     if ((pendingEntry = pendingEntryQueue.poll()) != null) {
                         syncedNodeNumber = 1;
@@ -609,12 +608,11 @@ public abstract class AbstractRaftCore implements RaftCore {
      * 作为leader节点，把数据同步写入集群大多数节点
      *
      * @param entryData 准备进行集群大多数确认的新Entry数据
-     * @return 异步返回在applyEntry中封装好的数据结构体，这样的设计可以让{@link #applyEntry(boolean, long, ByteBuf)}
-     * 的子类实现给出动态灵活的消息响应拓展
+     * @return {@link AsyncFuture}
      */
     @Override
-    public AsyncFuture<Object> appendEntryOnLeaderState(ByteBuf entryData) {
-        AsyncFuture<Object> asyncFuture = AsyncFuture.of(Object.class);
+    public <T> AsyncFuture<T> appendEntryOnLeaderState(ByteBuf entryData) {
+        AsyncFuture<T> asyncFuture = AsyncFuture.of(null);
         PendingEntry newEntry = new PendingEntry(entryData, asyncFuture);
 
         locker.lock();
@@ -664,8 +662,8 @@ public abstract class AbstractRaftCore implements RaftCore {
      */
     private static class PendingEntry {
         private final ByteBuf entryData;
-        private final AsyncFuture<Object> asyncFuture;
-        private PendingEntry(ByteBuf entryData, AsyncFuture<Object> asyncFuture) {
+        private final AsyncFuture<?> asyncFuture;
+        private PendingEntry(ByteBuf entryData, AsyncFuture<?> asyncFuture) {
             this.entryData = entryData;
             this.asyncFuture = asyncFuture;
         }

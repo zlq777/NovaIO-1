@@ -47,13 +47,13 @@ public class ViewNodeRaftCore extends AbstractRaftCore {
     /**
      * 应用已经完成集群多数派写入的Entry数据。leader节点需要返回响应数据结构体
      *
-     * @param isLeader   当前节点是否作为leader节点完成了这一Entry数据的同步
-     * @param entryIndex 已经完成集群多数派写入的Entry序列号
-     * @param entryData  已经完成集群多数派写入的Entry数据
-     * @return 响应数据结构体
+     * @param isLeader    当前节点是否作为leader节点完成了这一Entry数据的同步
+     * @param entryIndex  已经完成集群多数派写入的Entry序列号
+     * @param entryData   已经完成集群多数派写入的Entry数据
+     * @param asyncFuture {@link AsyncFuture}
      */
     @Override
-    public Object applyEntry(boolean isLeader, long entryIndex, ByteBuf entryData) {
+    public void applyEntry(boolean isLeader, long entryIndex, ByteBuf entryData, AsyncFuture<?> asyncFuture) {
         int operateCode = entryData.readInt();
 
         switch (operateCode) {
@@ -65,10 +65,8 @@ public class ViewNodeRaftCore extends AbstractRaftCore {
 
                 entryData.release();
 
-                return addNewDataNode(clusterName, address);
+                addNewDataNode(clusterName, address);
         }
-
-        return null;
     }
 
     /**
@@ -77,7 +75,7 @@ public class ViewNodeRaftCore extends AbstractRaftCore {
      * @param clusterName 集群名称
      * @param address {@link InetSocketAddress}
      */
-    private boolean addNewDataNode(String clusterName, InetSocketAddress address) {
+    private void addNewDataNode(String clusterName, InetSocketAddress address) {
         List<InetSocketAddress> addressList = dataNodeMap.get(clusterName);
         ByteBuf byteBuf = alloc.buffer();
 
@@ -94,7 +92,6 @@ public class ViewNodeRaftCore extends AbstractRaftCore {
         }
 
         addressList.add(address);
-        return false;
     }
 
 }
