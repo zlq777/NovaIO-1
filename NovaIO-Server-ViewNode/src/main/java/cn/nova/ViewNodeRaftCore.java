@@ -10,10 +10,6 @@ import io.netty.util.Timer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.nio.charset.StandardCharsets;
-
-import static cn.nova.CommandType.*;
-
 /**
  * {@link ViewNodeRaftCore}给出了ViewNode节点的EntryData应用逻辑
  *
@@ -41,12 +37,7 @@ public class ViewNodeRaftCore extends AbstractRaftCore {
      */
     @Override
     public void applyEntry(long entryIndex, ByteBuf entryData) {
-        int commandType = entryData.readInt();
-        switch (commandType) {
-            case ADD_NEW_DATANODE :
-                log.info(entryData.toString(StandardCharsets.UTF_8));
-                break;
-        }
+        log.info(entryIndex);
         entryData.release();
     }
 

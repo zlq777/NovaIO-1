@@ -29,8 +29,8 @@ import static cn.nova.CommonUtils.*;
  */
 public abstract class AbstractRaftCore implements RaftCore {
 
-    private static final Logger LOG = LogManager.getLogger(RaftCore.class);
-    private final Queue<InSyncEntry> pendingEntryQueue;
+    private static final Logger log = LogManager.getLogger(RaftCore.class);
+    private final Queue<PendingEntry> pendingEntryQueue;
     private final ClusterNode[] otherNodes;
     private final ByteBufAllocator alloc;
     private final UDPService udpService;
@@ -99,22 +99,26 @@ public abstract class AbstractRaftCore implements RaftCore {
      */
     private volatile long applyEntryIndex;
     /**
+     * pendingEntryIndex表示{@link #pendingEntry}的序列号
+     */
+    private volatile long pendingEntryIndex;
+    /**
      * 当前节点针对{@link #currentTerm}是否已经进行过投票
      */
     private volatile boolean hasVote;
     /**
-     * inSyncEntry在不同状态下有不同的含义：
+     * pendingEntry在不同状态下有不同的含义：
      * <ul>
      *     <li>
-     *         leader状态下，表示正在全局同步的全局最新Entry，来源于客户端的写入任务。{@link InSyncEntry#asyncFuture}不为空，需要在
+     *         leader状态下，表示正在全局同步的全局最新Entry，来源于客户端的写入任务。{@link PendingEntry#asyncFuture}不为空，需要在
      *         集群大多数确认后执行回调通知
      *     </li>
      *     <li>
-     *         follower状态下，表示针对性同步的局部最新Entry，来源于leader节点的主动同步复制。{@link InSyncEntry#asyncFuture}为空
+     *         follower状态下，表示针对性同步的局部最新Entry，来源于leader节点的主动同步复制。{@link PendingEntry#asyncFuture}为空
      *     </li>
      * </ul>
      */
-    private volatile InSyncEntry inSyncEntry;
+    private volatile PendingEntry pendingEntry;
     private volatile ClusterNode leader;
     private volatile RaftState state;
 
@@ -247,28 +251,30 @@ public abstract class AbstractRaftCore implements RaftCore {
      * @param node {@link ClusterNode}
      */
     private void sendEntrySyncMsg(ClusterNode node) {
-        long inSyncEntryIndex = node.inSyncEntryIndex();
-        long mostNewEntryIndex = (inSyncEntry == null) ? applyEntryIndex : inSyncEntry.entryIndex;
-
-        if (inSyncEntryIndex > mostNewEntryIndex) {
-            return;
-        }
+        long sendEntryIndex = node.inSyncEntryIndex();
 
         ByteBuf content = alloc.buffer();
         DatagramPacket packet = new DatagramPacket(content, node.address());
 
         writeCharSequence(content, "/msg/entry-sync");
-        content.writeLong(inSyncEntryIndex);
+        content.writeInt(index).writeLong(currentTerm).writeLong(sendEntryIndex);
 
-        if (inSyncEntryIndex == mostNewEntryIndex && inSyncEntry != null) {
-
-            ByteBuf entryData = inSyncEntry.entryData;
+        if (pendingEntry == null) {
+            if (sendEntryIndex > applyEntryIndex) {
+                packet.release();
+                return;
+            }
+            storage.readEntry(sendEntryIndex, content);
+        } else {
+            if (sendEntryIndex > pendingEntryIndex) {
+                packet.release();
+                return;
+            }
+            ByteBuf entryData = pendingEntry.entryData;
 
             entryData.markReaderIndex();
             content.writeBytes(entryData);
             entryData.resetReaderIndex();
-        } else {
-            storage.readEntry(inSyncEntryIndex, content);
         }
 
         udpService.send(packet);
@@ -404,10 +410,10 @@ public abstract class AbstractRaftCore implements RaftCore {
         }
 
         if (successVoteNumber == majority) {
-            LOG.info("当前节点拿到了大多数选票, 成功当选leader, currentTerm:" + currentTerm);
+            log.info("当前节点拿到了大多数选票, 成功当选leader, currentTerm:" + currentTerm);
             initLeader();
         } else if (failVoteNumber == majority) {
-            LOG.info("当前节点不甘心失败, 重新发起了一次选举");
+            log.info("当前节点不甘心失败, 重新发起了一次选举");
             startNewVote();
         }
     }
@@ -437,16 +443,14 @@ public abstract class AbstractRaftCore implements RaftCore {
         locker.lock();
         receiveLeaderMsg(leaderIndex, leaderTerm);
 
-        if (inSyncEntry != null) {
+        if (pendingEntry != null) {
+            if (inSyncEntryIndex > pendingEntryIndex) {
+                storage.writeEntry(pendingEntryIndex, pendingEntry.entryData);
+                changeApplyEntryIndex(pendingEntryIndex);
 
-            long syncedEntryIndex = inSyncEntry.entryIndex;
-
-            if (inSyncEntryIndex > syncedEntryIndex) {
-                storage.writeEntry(syncedEntryIndex, inSyncEntry.entryData);
-                changeApplyEntryIndex(syncedEntryIndex);
-
-                applyEntry(syncedEntryIndex, inSyncEntry.entryData);
+                applyEntry(pendingEntryIndex, pendingEntry.entryData);
             }
+            this.pendingEntry = null;
         }
 
         ByteBuf content = alloc.buffer();
@@ -473,19 +477,22 @@ public abstract class AbstractRaftCore implements RaftCore {
         receiveLeaderMsg(leaderIndex, leaderTerm);
 
         if (entryIndex > applyEntryIndex) {
-            InSyncEntry inSyncEntry = this.inSyncEntry;
+            if (pendingEntry != null) {
+                if (entryIndex > pendingEntryIndex) {
+                    storage.writeEntry(pendingEntryIndex, pendingEntry.entryData);
+                    changeApplyEntryIndex(pendingEntryIndex);
 
-            if (inSyncEntry != null) {
-                long syncedEntryIndex = inSyncEntry.entryIndex;
+                    applyEntry(pendingEntryIndex, pendingEntry.entryData);
 
-                storage.writeEntry(syncedEntryIndex, inSyncEntry.entryData);
-                changeApplyEntryIndex(syncedEntryIndex);
-
-                applyEntry(syncedEntryIndex, inSyncEntry.entryData);
+                    pendingEntry = new PendingEntry(entryData, null);
+                    pendingEntryIndex = entryIndex;
+                } else {
+                    entryData.release();
+                }
+            } else {
+                pendingEntry = new PendingEntry(entryData, null);
+                pendingEntryIndex = entryIndex;
             }
-
-            this.inSyncEntry = new InSyncEntry(entryIndex, entryData, null);
-
         } else {
             entryData.release();
         }
@@ -494,7 +501,7 @@ public abstract class AbstractRaftCore implements RaftCore {
         DatagramPacket packet = new DatagramPacket(content, leader.address());
 
         writeCharSequence(content, "/msg/entry-sync/response");
-        content.writeInt(index).writeLong(applyEntryIndex);
+        content.writeInt(index).writeLong(entryIndex);
 
         locker.unlock();
         udpService.send(packet);
@@ -520,17 +527,17 @@ public abstract class AbstractRaftCore implements RaftCore {
 
         if (oldState == RaftState.LEADER) {
 
-            InSyncEntry inSyncEntry = this.inSyncEntry;
+            PendingEntry pendingEntry = this.pendingEntry;
 
-            if (inSyncEntry != null) {
-                inSyncEntry.entryData.release();
-                inSyncEntry.asyncFuture.notifyResult(-1L);
-                this.inSyncEntry = null;
+            if (pendingEntry != null) {
+                pendingEntry.entryData.release();
+                pendingEntry.asyncFuture.notifyResult(-1L);
+                this.pendingEntry = null;
             }
 
-            while ((inSyncEntry = pendingEntryQueue.poll()) != null) {
-                inSyncEntry.entryData.release();
-                inSyncEntry.asyncFuture.notifyResult(-1L);
+            while ((pendingEntry = pendingEntryQueue.poll()) != null) {
+                pendingEntry.entryData.release();
+                pendingEntry.asyncFuture.notifyResult(-1L);
             }
         }
     }
@@ -566,25 +573,21 @@ public abstract class AbstractRaftCore implements RaftCore {
 
             ClusterNode node = getNode(nodeIndex);
 
-            if (inSyncEntry != null && syncedEntryIndex == inSyncEntry.entryIndex) {
+            if (pendingEntry != null && syncedEntryIndex == pendingEntryIndex) {
                 if (++ syncedNodeNumber == majority) {
+                    ByteBuf entryData = pendingEntry.entryData;
+                    AsyncFuture<Long> asyncFuture = pendingEntry.asyncFuture;
 
-                    InSyncEntry syncedEntry = inSyncEntry;
-                    ByteBuf entryData = syncedEntry.entryData;
-                    AsyncFuture<Long> asyncFuture = syncedEntry.asyncFuture;
+                    storage.writeEntry(pendingEntryIndex, entryData);
+                    changeApplyEntryIndex(pendingEntryIndex);
 
-                    storage.writeEntry(syncedEntryIndex, entryData);
-                    changeApplyEntryIndex(syncedEntryIndex);
+                    applyEntry(pendingEntryIndex, entryData);
 
-                    applyEntry(syncedEntryIndex, entryData);
+                    asyncFuture.notifyResult(pendingEntryIndex);
 
-                    asyncFuture.notifyResult(syncedEntryIndex);
-
-                    if ((inSyncEntry = pendingEntryQueue.poll()) != null) {
-                        long newEntryIndex = applyEntryIndex + 1;
-
+                    if ((pendingEntry = pendingEntryQueue.poll()) != null) {
                         syncedNodeNumber = 1;
-                        inSyncEntry.entryIndex = newEntryIndex;
+                        pendingEntryIndex = applyEntryIndex + 1;
                     }
                 }
             }
@@ -606,16 +609,16 @@ public abstract class AbstractRaftCore implements RaftCore {
     @Override
     public AsyncFuture<Long> onLeaderAppendEntry(ByteBuf entryData) {
         AsyncFuture<Long> asyncFuture = AsyncFuture.of(Long.class);
-        InSyncEntry newEntry = new InSyncEntry(-1L, entryData, asyncFuture);
+        PendingEntry newEntry = new PendingEntry(entryData, asyncFuture);
 
         locker.lock();
 
         if (state == RaftState.LEADER) {
-            if (inSyncEntry == null) {
-                newEntry.entryIndex = applyEntryIndex + 1;
-
+            if (pendingEntry == null) {
                 syncedNodeNumber = 1;
-                inSyncEntry = newEntry;
+                pendingEntry = newEntry;
+                pendingEntryIndex = applyEntryIndex + 1;
+                sendEntrySyncMsg();
             } else {
                 pendingEntryQueue.offer(newEntry);
             }
@@ -649,16 +652,14 @@ public abstract class AbstractRaftCore implements RaftCore {
     }
 
     /**
-     * {@link InSyncEntry}是正在进行同步、等待被确认应用的Entry
+     * {@link PendingEntry}是正在进行同步、等待被确认应用的Entry
      *
      * @author RealDragonking
      */
-    private static class InSyncEntry {
-        private volatile long entryIndex;
+    private static class PendingEntry {
         private final ByteBuf entryData;
         private final AsyncFuture<Long> asyncFuture;
-        private InSyncEntry(long entryIndex, ByteBuf entryData, AsyncFuture<Long> asyncFuture) {
-            this.entryIndex = entryIndex;
+        private PendingEntry(ByteBuf entryData, AsyncFuture<Long> asyncFuture) {
             this.entryData = entryData;
             this.asyncFuture = asyncFuture;
         }
