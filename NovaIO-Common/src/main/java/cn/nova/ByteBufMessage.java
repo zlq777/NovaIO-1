@@ -5,7 +5,7 @@ import io.netty.buffer.ByteBufAllocator;
 
 import java.util.function.Consumer;
 
-import static cn.nova.CommonUtils.writeCharSequence;
+import static cn.nova.CommonUtils.writeString;
 
 /**
  * {@link ByteBufMessage}提供了一种更方便的方法，在写入主体消息前，往头部写入长度字段和路径字段
@@ -42,7 +42,7 @@ public class ByteBufMessage {
         ByteBuf byteBuf = ByteBufAllocator.DEFAULT.buffer();
         byteBuf.writerIndex(4);
 
-        writeCharSequence(byteBuf, path);
+        writeString(byteBuf, path);
 
         return new ByteBufMessage(byteBuf);
     }

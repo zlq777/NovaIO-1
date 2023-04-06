@@ -25,7 +25,7 @@ public class AsyncFutureImpl<T> implements AsyncFuture<T> {
 
         this.pos = 0;
         this.hasResult = false;
-        this.listeners = new AsyncFutureListener[1];
+        this.listeners = new AsyncFutureListener[2];
     }
 
     /**
@@ -76,12 +76,14 @@ public class AsyncFutureImpl<T> implements AsyncFuture<T> {
      * @param result 执行结果
      */
     @Override
-    public synchronized void notifyResult(T result) {
-        if (! hasResult) {
-            this.hasResult = true;
-            this.result = result;
-            for (AsyncFutureListener<T> listener : listeners) {
-                listener.onNotify(result);
+    public void notifyResult(T result) {
+        synchronized (this) {
+            if (! hasResult) {
+                this.hasResult = true;
+                this.result = result;
+                for (int i = 0; i < pos; i++) {
+                    listeners[i].onNotify(result);
+                }
             }
         }
     }

@@ -6,7 +6,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
 
-import static cn.nova.CommandType.*;
+import static cn.nova.OperateCode.*;
 
 /**
  * {@link ViewNodeClientService}负责提供面向客户端、与全局数据视图相关的TCP服务接口
@@ -53,7 +53,7 @@ public final class ViewNodeClientService {
      * @param byteBuf {@link ByteBuf}字节缓冲区
      */
     @PathMapping(path = "/add-datanode-info")
-    public void receiveQueryDataNodeInfoRequest(Channel channel, ByteBuf byteBuf) {
+    public void receiveAddDataNodeInfoRequest(Channel channel, ByteBuf byteBuf) {
         long sessionId = byteBuf.readLong();
 
         ByteBuf entryData = alloc.buffer();

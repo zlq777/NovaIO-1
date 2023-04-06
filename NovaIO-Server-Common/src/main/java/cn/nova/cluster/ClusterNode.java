@@ -12,7 +12,6 @@ public final class ClusterNode {
     private final int index;
     private final InetSocketAddress address;
     private volatile long inSyncEntryIndex;
-    private volatile long applicableEntryIndex;
 
     public ClusterNode(int index, InetSocketAddress address) {
         this.index = index;
@@ -47,15 +46,6 @@ public final class ClusterNode {
     }
 
     /**
-     * 获取到此节点的可应用Entry序列号
-     *
-     * @return 此节点的可应用Entry序列号
-     */
-    public long applicableEntryIndex() {
-        return this.applicableEntryIndex;
-    }
-
-    /**
      * 获取到此{@link ClusterNode}是否已经经过Entry一致性检测
      *
      * @return 是否已经经过Entry一致性检测
@@ -71,14 +61,6 @@ public final class ClusterNode {
      */
     public InetSocketAddress address() {
         return this.address;
-    }
-
-    /**
-     * 重置此节点的{@link #inSyncEntryIndex}、{@link #applicableEntryIndex}
-     */
-    public void reset() {
-        this.inSyncEntryIndex = -1L;
-        this.applicableEntryIndex = -1L;
     }
 
 }

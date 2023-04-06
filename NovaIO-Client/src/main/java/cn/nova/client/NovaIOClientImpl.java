@@ -25,8 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-import static cn.nova.CommonUtils.getThreadFactory;
-import static cn.nova.CommonUtils.writeCharSequence;
+import static cn.nova.CommonUtils.*;
 
 /**
  * {@link NovaIOClient}的默认实现类
@@ -87,8 +86,8 @@ final class NovaIOClientImpl implements NovaIOClient {
                 .build("/add-datanode-info")
                 .doWrite(byteBuf -> {
                     byteBuf.writeLong(sessionId);
-                    writeCharSequence(byteBuf, clusterName);
-                    writeCharSequence(byteBuf, ipAddress);
+                    writeString(byteBuf, clusterName);
+                    writeString(byteBuf, ipAddress);
                     byteBuf.writeInt(port);
                 });
 

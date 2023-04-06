@@ -10,6 +10,9 @@ import io.netty.util.Timer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import static cn.nova.OperateCode.*;
+import static cn.nova.CommonUtils.*;
+
 /**
  * {@link ViewNodeRaftCore}给出了ViewNode节点的EntryData应用逻辑
  *
@@ -37,7 +40,17 @@ public class ViewNodeRaftCore extends AbstractRaftCore {
      */
     @Override
     public void applyEntry(long entryIndex, ByteBuf entryData) {
-        log.info(entryIndex);
+        int operateCode = entryData.readInt();
+
+        switch (operateCode) {
+            case ADD_NEW_DATANODE :
+                String clusterName = readString(entryData);
+                String ipAddress = readString(entryData);
+                int port = entryData.readInt();
+                log.info("{} {} {} {}", entryIndex, clusterName, ipAddress, port);
+                break;
+        }
+
         entryData.release();
     }
 

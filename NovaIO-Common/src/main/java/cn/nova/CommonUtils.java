@@ -33,14 +33,25 @@ public final class CommonUtils {
      * 将字符串的长度和内容写入此{@link ByteBuf}
      *
      * @param byteBuf {@link ByteBuf}字节缓冲区
-     * @param charSequence 字符串内容
+     * @param string {@link String}
      */
-    public static void writeCharSequence(ByteBuf byteBuf, CharSequence charSequence) {
+    public static void writeString(ByteBuf byteBuf, String string) {
         int writerIdx = byteBuf.writerIndex() + 4;
-        int pathLen = byteBuf.writerIndex(writerIdx).writeCharSequence(charSequence, StandardCharsets.UTF_8);
+        int pathLen = byteBuf.writerIndex(writerIdx).writeCharSequence(string, StandardCharsets.UTF_8);
         byteBuf.writerIndex(writerIdx - 4)
                 .writeInt(pathLen)
                 .writerIndex(writerIdx + pathLen);
+    }
+
+    /**
+     * 从{@link ByteBuf}中读取字符串的长度，随后读取尾随的字符串
+     *
+     * @param byteBuf {@link ByteBuf}字节缓冲区
+     * @return {@link String}
+     */
+    public static String readString(ByteBuf byteBuf) {
+        int len = byteBuf.readInt();
+        return (String) byteBuf.readCharSequence(len, StandardCharsets.UTF_8);
     }
 
     /**

@@ -13,8 +13,8 @@ import io.netty.util.TimerTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayDeque;
 import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -131,7 +131,7 @@ public abstract class AbstractRaftCore implements RaftCore {
                             int tickTime) {
 
         this.otherNodes = clusterInfo.getOtherNodes();
-        this.pendingEntryQueue = new ArrayDeque<>();
+        this.pendingEntryQueue = new ConcurrentLinkedQueue<>();
         this.locker = new ReentrantLock();
         this.udpService = udpService;
         this.storage = storage;
@@ -165,7 +165,6 @@ public abstract class AbstractRaftCore implements RaftCore {
                     switch (state) {
                         case LEADER:
                             waitTicks = sendMsgIntervalTicks;
-                            sendHeartbeatMsg();
                             sendEntrySyncMsg();
                             break;
                         case FOLLOWER:
@@ -235,58 +234,59 @@ public abstract class AbstractRaftCore implements RaftCore {
     }
 
     /**
-     * 向其他节点发送Entry条目同步数据
+     * 向所有{@link ClusterNode}节点发送Entry条目同步数据
      */
     private void sendEntrySyncMsg() {
         for (ClusterNode node : otherNodes) {
-            if (node.hasChecked()) {
-                sendEntrySyncMsg(node);
-            }
+            sendEntrySyncMsg(node);
         }
     }
 
     /**
-     * 向指定节点发送Entry条目数据
+     * 检查是否可以向{@link ClusterNode}节点发送Entry数据，如若可以则调用{@link #sendEntrySyncMsg(ClusterNode, long, boolean)}实际执行
      *
      * @param node {@link ClusterNode}
      */
     private void sendEntrySyncMsg(ClusterNode node) {
-        long sendEntryIndex = node.inSyncEntryIndex();
+        if (node.hasChecked()) {
+            long sendEntryIndex = node.inSyncEntryIndex();
 
+            if (pendingEntry != null && sendEntryIndex == pendingEntryIndex) {
+                sendEntrySyncMsg(node, sendEntryIndex, true);
+                return;
+            } else if (sendEntryIndex <= applyEntryIndex){
+                sendEntrySyncMsg(node, sendEntryIndex, false);
+                return;
+            }
+        }
+        sendHeartbeatMsg(node);
+    }
+
+    /**
+     * 向{@link ClusterNode}节点发送Entry条目数据
+     *
+     * @param node {@link ClusterNode}
+     * @param sendEntryIndex 准备发送的Entry序列号
+     * @param useInSyncEntryData 是否使用正在等待写入集群的Entry数据
+     */
+    private void sendEntrySyncMsg(ClusterNode node, long sendEntryIndex, boolean useInSyncEntryData) {
         ByteBuf content = alloc.buffer();
         DatagramPacket packet = new DatagramPacket(content, node.address());
 
-        writeCharSequence(content, "/msg/entry-sync");
+        writeString(content, "/msg/entry-sync");
         content.writeInt(index).writeLong(currentTerm).writeLong(sendEntryIndex);
 
-        if (pendingEntry == null) {
-            if (sendEntryIndex > applyEntryIndex) {
-                packet.release();
-                return;
-            }
-            storage.readEntry(sendEntryIndex, content);
-        } else {
-            if (sendEntryIndex > pendingEntryIndex) {
-                packet.release();
-                return;
-            }
+        if (useInSyncEntryData) {
             ByteBuf entryData = pendingEntry.entryData;
 
             entryData.markReaderIndex();
             content.writeBytes(entryData);
             entryData.resetReaderIndex();
+        } else {
+            storage.readEntry(sendEntryIndex, content);
         }
 
         udpService.send(packet);
-    }
-
-    /**
-     * 向其它节点发送心跳信息
-     */
-    private void sendHeartbeatMsg() {
-        for (ClusterNode node : otherNodes) {
-            sendHeartbeatMsg(node);
-        }
     }
 
     /**
@@ -298,7 +298,7 @@ public abstract class AbstractRaftCore implements RaftCore {
         ByteBuf content = alloc.buffer();
         DatagramPacket packet = new DatagramPacket(content, node.address());
 
-        writeCharSequence(content, "/msg/heartbeat");
+        writeString(content, "/msg/heartbeat");
         content.writeInt(index).writeLong(currentTerm).writeLong(node.inSyncEntryIndex());
 
         udpService.send(packet);
@@ -312,7 +312,7 @@ public abstract class AbstractRaftCore implements RaftCore {
             ByteBuf content = alloc.buffer();
             DatagramPacket packet = new DatagramPacket(content, node.address());
 
-            writeCharSequence(content, "/vote/request");
+            writeString(content, "/vote/request");
             content.writeInt(index).writeLong(currentTerm).writeLong(applyEntryIndex);
 
             udpService.send(packet);
@@ -334,7 +334,7 @@ public abstract class AbstractRaftCore implements RaftCore {
         ByteBuf content = alloc.buffer();
         DatagramPacket packet = new DatagramPacket(content, node.address());
 
-        writeCharSequence(content, "/vote/response");
+        writeString(content, "/vote/response");
         content.writeLong(candidateTerm);
 
         locker.lock();
@@ -426,7 +426,7 @@ public abstract class AbstractRaftCore implements RaftCore {
         state = RaftState.LEADER;
         waitTicks = sendMsgIntervalTicks;
         for (ClusterNode node : otherNodes) {
-            node.reset();
+            node.setInSyncEntryIndex(-1L);
             sendHeartbeatMsg(node);
         }
     }
@@ -445,10 +445,12 @@ public abstract class AbstractRaftCore implements RaftCore {
 
         if (pendingEntry != null) {
             if (inSyncEntryIndex > pendingEntryIndex) {
-                storage.writeEntry(pendingEntryIndex, pendingEntry.entryData);
+                ByteBuf pendingEntryData = pendingEntry.entryData;
+
+                storage.writeEntry(pendingEntryIndex, pendingEntryData);
                 changeApplyEntryIndex(pendingEntryIndex);
 
-                applyEntry(pendingEntryIndex, pendingEntry.entryData);
+                applyEntry(pendingEntryIndex, pendingEntryData);
             }
             this.pendingEntry = null;
         }
@@ -456,7 +458,7 @@ public abstract class AbstractRaftCore implements RaftCore {
         ByteBuf content = alloc.buffer();
         DatagramPacket packet = new DatagramPacket(content, leader.address());
 
-        writeCharSequence(content, "/msg/heartbeat/response");
+        writeString(content, "/msg/heartbeat/response");
         content.writeInt(index).writeLong(applyEntryIndex);
 
         locker.unlock();
@@ -479,10 +481,12 @@ public abstract class AbstractRaftCore implements RaftCore {
         if (entryIndex > applyEntryIndex) {
             if (pendingEntry != null) {
                 if (entryIndex > pendingEntryIndex) {
-                    storage.writeEntry(pendingEntryIndex, pendingEntry.entryData);
+                    ByteBuf pendingEntryData = pendingEntry.entryData;
+
+                    storage.writeEntry(pendingEntryIndex, pendingEntryData);
                     changeApplyEntryIndex(pendingEntryIndex);
 
-                    applyEntry(pendingEntryIndex, pendingEntry.entryData);
+                    applyEntry(pendingEntryIndex, pendingEntryData);
 
                     pendingEntry = new PendingEntry(entryData, null);
                     pendingEntryIndex = entryIndex;
@@ -500,7 +504,7 @@ public abstract class AbstractRaftCore implements RaftCore {
         ByteBuf content = alloc.buffer();
         DatagramPacket packet = new DatagramPacket(content, leader.address());
 
-        writeCharSequence(content, "/msg/entry-sync/response");
+        writeString(content, "/msg/entry-sync/response");
         content.writeInt(index).writeLong(entryIndex);
 
         locker.unlock();
@@ -518,15 +522,11 @@ public abstract class AbstractRaftCore implements RaftCore {
         leader = getNode(leaderIndex);
         waitTicks = resetWaitTicks;
 
-        RaftState oldState = state;
-        state = RaftState.FOLLOWER;
-
         if (leaderTerm != currentTerm) {
             changeTerm(leaderTerm);
         }
 
-        if (oldState == RaftState.LEADER) {
-
+        if (state == RaftState.LEADER) {
             PendingEntry pendingEntry = this.pendingEntry;
 
             if (pendingEntry != null) {
@@ -540,6 +540,7 @@ public abstract class AbstractRaftCore implements RaftCore {
                 pendingEntry.asyncFuture.notifyResult(-1L);
             }
         }
+        state = RaftState.FOLLOWER;
     }
 
     /**
@@ -570,8 +571,11 @@ public abstract class AbstractRaftCore implements RaftCore {
     public void receiveEntrySyncResponse(int nodeIndex, long syncedEntryIndex) {
         locker.lock();
         if (state == RaftState.LEADER) {
-
             ClusterNode node = getNode(nodeIndex);
+
+            if (syncedEntryIndex == node.inSyncEntryIndex()) {
+                node.setInSyncEntryIndex(syncedEntryIndex + 1);
+            }
 
             if (pendingEntry != null && syncedEntryIndex == pendingEntryIndex) {
                 if (++ syncedNodeNumber == majority) {
@@ -589,13 +593,14 @@ public abstract class AbstractRaftCore implements RaftCore {
                         syncedNodeNumber = 1;
                         pendingEntryIndex = applyEntryIndex + 1;
                     }
+
+                    sendEntrySyncMsg();
+                    locker.unlock();
+                    return;
                 }
             }
 
-            if (syncedEntryIndex == node.inSyncEntryIndex()) {
-                node.setInSyncEntryIndex(syncedEntryIndex + 1);
-                sendEntrySyncMsg(node);
-            }
+            sendEntrySyncMsg(node);
         }
         locker.unlock();
     }
