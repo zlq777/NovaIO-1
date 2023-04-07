@@ -471,7 +471,7 @@ public abstract class AbstractRaftCore implements RaftCore {
         udpService.send(packet);
 
         if (pendingEntry != null) {
-            applyEntry(applyEntryIndex, pendingEntry.entryData, pendingEntry.asyncFuture);
+            applyEntry(applyEntryIndex, pendingEntry.entryData, null);
         }
     }
 
@@ -528,7 +528,7 @@ public abstract class AbstractRaftCore implements RaftCore {
         udpService.send(packet);
 
         if (pendingEntry != null) {
-            applyEntry(applyEntryIndex, pendingEntry.entryData, pendingEntry.asyncFuture);
+            applyEntry(applyEntryIndex, pendingEntry.entryData, null);
         }
     }
 
