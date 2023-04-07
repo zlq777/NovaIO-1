@@ -12,17 +12,17 @@ import io.netty.channel.Channel;
 import static cn.nova.OperateCode.*;
 
 /**
- * {@link ViewNodeGlobalSystemService}负责提供与整个NovaIO分布式系统相关的TCP服务接口
+ * {@link GlobalSystemService}负责提供与整个NovaIO分布式系统相关的TCP服务接口
  *
  * @author RealDragonking
  */
-public final class ViewNodeGlobalSystemService {
+public final class GlobalSystemService {
 
     private final DataNodeInfoStruct dataNodeInfoStruct;
     private final ByteBufAllocator alloc;
     private final RaftCore raftCore;
 
-    public ViewNodeGlobalSystemService(RaftCore raftCore, DataNodeInfoStruct dataNodeInfoStruct) {
+    public GlobalSystemService(RaftCore raftCore, DataNodeInfoStruct dataNodeInfoStruct) {
         this.alloc = ByteBufAllocator.DEFAULT;
         this.dataNodeInfoStruct = dataNodeInfoStruct;
         this.raftCore = raftCore;
