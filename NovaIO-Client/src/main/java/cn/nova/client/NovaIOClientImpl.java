@@ -178,7 +178,16 @@ final class NovaIOClientImpl implements NovaIOClient {
      */
     @Override
     public AsyncFuture<ChangeDataNodeInfoResult> removeDataNodeCluster(String clusterName) {
-        throw new UnsupportedOperationException();
+        AsyncFuture<ChangeDataNodeInfoResult> asyncFuture = AsyncFuture.of(ChangeDataNodeInfoResult.class);
+        long sessionId = asyncFuture.getSessionId();
+
+        ByteBufMessage message = ByteBufMessage.build("/remove-datanode-cluster").doWrite(msg -> {
+            msg.writeLong(sessionId);
+            writeString(msg, clusterName);
+        });
+
+        viewNodeClient.sendMessage(message.create(), asyncFuture);
+        return asyncFuture;
     }
 
     /**

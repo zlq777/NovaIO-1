@@ -32,50 +32,68 @@ public class DataNodeInfoStruct {
      * @param byteBuf 用于读写的{@link ByteBuf}字节缓冲区。复用已有的，去掉了二次创建带来的开销
      * @return 是否成功创建
      */
-    public boolean addNewDataNodeCluster(String clusterName, InetSocketAddress[] addresses, ByteBuf byteBuf) {
+    public boolean addDataNodeCluster(String clusterName, InetSocketAddress[] addresses, ByteBuf byteBuf) {
         try {
-            return addNewDataNodeCluster0(clusterName, addresses, byteBuf);
+            synchronized (this) {
+                Set<InetSocketAddress> addrSet = dataNodeInfoMap.get(clusterName);
+                if (addrSet != null) {
+                    return false;
+                }
+
+                dataNodeInfoMap.put(clusterName, addrSet = createAddrSet());
+
+                for (String name : dataNodeInfoMap.keySet()) {
+                    writeString(byteBuf, name);
+                }
+
+                storage.writeBytes("clusters", byteBuf);
+                byteBuf.clear();
+
+                for (InetSocketAddress address : addresses) {
+                    String ipAddr = address.getAddress().getHostAddress();
+                    int port = address.getPort();
+
+                    addrSet.add(address);
+
+                    writeString(byteBuf, ipAddr);
+                    byteBuf.writeInt(port);
+                }
+
+                storage.writeBytes("cluster:" + clusterName, byteBuf);
+                return true;
+            }
         } finally {
             byteBuf.release();
         }
     }
 
     /**
-     * 具体执行{@link #addNewDataNodeCluster(String, InetSocketAddress[], ByteBuf)}
+     * 删除一个DataNode节点集群，如果不存在则删除失败
      *
      * @param clusterName 集群名称
-     * @param addresses 所有节点的{@link InetSocketAddress}列表
-     * @param byteBuf 用于读写的{@link ByteBuf}字节缓冲区。复用已有的，减少了二次创建
-     * @return 是否成功创建
+     * @param byteBuf 用于读写的{@link ByteBuf}字节缓冲区。复用已有的，去掉了二次创建带来的开销
+     * @return 是否成功删除
      */
-    private boolean addNewDataNodeCluster0(String clusterName, InetSocketAddress[] addresses, ByteBuf byteBuf) {
-        synchronized (this) {
-            Set<InetSocketAddress> addrSet = dataNodeInfoMap.get(clusterName);
-            if (addrSet != null) {
-                return false;
+    public boolean removeDataNodeCluster(String clusterName, ByteBuf byteBuf) {
+        try {
+            synchronized (this) {
+                if (dataNodeInfoMap.remove(clusterName) == null) {
+                    return false;
+                }
+
+                for (String name : dataNodeInfoMap.keySet()) {
+                    writeString(byteBuf, name);
+                }
+
+                storage.writeBytes("clusters", byteBuf);
+                byteBuf.clear();
+
+                // 实现LocalStorage的删除能力
+
+                return true;
             }
-
-            dataNodeInfoMap.put(clusterName, addrSet = createAddrSet());
-
-            for (String name : dataNodeInfoMap.keySet()) {
-                writeString(byteBuf, name);
-            }
-
-            storage.writeBytes("clusters", byteBuf);
-            byteBuf.clear();
-
-            for (InetSocketAddress address : addresses) {
-                String ipAddr = address.getAddress().getHostAddress();
-                int port = address.getPort();
-
-                addrSet.add(address);
-
-                writeString(byteBuf, ipAddr);
-                byteBuf.writeInt(port);
-            }
-
-            storage.writeBytes("cluster:" + clusterName, byteBuf);
-            return true;
+        } finally {
+            byteBuf.release();
         }
     }
 

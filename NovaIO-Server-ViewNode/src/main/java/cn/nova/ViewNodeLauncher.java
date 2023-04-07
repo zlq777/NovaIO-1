@@ -6,6 +6,7 @@ import cn.nova.config.NetworkConfig;
 import cn.nova.config.SourceConfig;
 import cn.nova.config.TimeConfig;
 import cn.nova.network.*;
+import cn.nova.service.ViewNodeGlobalSystemService;
 import cn.nova.struct.DataNodeInfoStruct;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.util.HashedWheelTimer;
@@ -65,7 +66,7 @@ public final class ViewNodeLauncher {
 
         udpHandler.register(new RaftService(raftCore));
 
-        tcpHandler.register(new ViewNodeClientService(raftCore, dataNodeInfoStruct));
+        tcpHandler.register(new ViewNodeGlobalSystemService(raftCore, dataNodeInfoStruct));
 
         onShutdown(() -> {
             udpService.close();

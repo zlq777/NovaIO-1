@@ -8,8 +8,6 @@ import cn.nova.struct.DataNodeInfoStruct;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.util.Timer;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.net.InetSocketAddress;
 
@@ -21,9 +19,9 @@ import static cn.nova.CommonUtils.*;
  *
  * @author RealDragonking
  */
-public class ViewNodeRaftCore extends AbstractRaftCore {
+@SuppressWarnings("unchecked")
+public final class ViewNodeRaftCore extends AbstractRaftCore {
 
-    private static final Logger log = LogManager.getLogger(ViewNodeRaftCore.class);
     private final DataNodeInfoStruct dataNodeInfoStruct;
 
     public ViewNodeRaftCore(DataNodeInfoStruct dataNodeInfoStruct,
@@ -46,30 +44,58 @@ public class ViewNodeRaftCore extends AbstractRaftCore {
      * @param asyncFuture {@link AsyncFuture}
      */
     @Override
-    @SuppressWarnings("unchecked")
     public void applyEntry(long entryIndex, ByteBuf entryData, AsyncFuture<?> asyncFuture) {
         int operateCode = entryData.readInt();
 
         switch (operateCode) {
-            case ADD_NEW_DATANODE_CLUSTER:
-                String clusterName = readString(entryData);
-                int nodeNumber = entryData.readInt();
-
-                InetSocketAddress[] addresses = new InetSocketAddress[nodeNumber];
-
-                for (int i = 0; i < nodeNumber; i++) {
-                    String ipAddress = readString(entryData);
-                    int port = entryData.readInt();
-
-                    addresses[i] = new InetSocketAddress(ipAddress, port);
-                }
-
-                boolean isSuccess = dataNodeInfoStruct.addNewDataNodeCluster(clusterName, addresses, entryData);
-
-                if (asyncFuture != null) {
-                    ((AsyncFuture<Boolean>)asyncFuture).notifyResult(isSuccess);
-                }
+            case ADD_DATANODE_CLUSTER:
+                doAddDataNodeCluster(entryData, asyncFuture);
                 break;
+            case REMOVE_DATANODE_CLUSTER :
+                doRemoveDataNodeCluster(entryData, asyncFuture);
+                break;
+        }
+    }
+
+    /**
+     * 对应于{@link OperateCode#ADD_DATANODE_CLUSTER}的数据处理逻辑
+     *
+     * @param entryData 已经完成集群多数派写入的Entry数据
+     * @param asyncFuture {@link AsyncFuture}
+     */
+    private void doAddDataNodeCluster(ByteBuf entryData, AsyncFuture<?> asyncFuture) {
+        String clusterName = readString(entryData);
+        int nodeNumber = entryData.readInt();
+
+        InetSocketAddress[] addresses = new InetSocketAddress[nodeNumber];
+
+        for (int i = 0; i < nodeNumber; i++) {
+            String ipAddress = readString(entryData);
+            int port = entryData.readInt();
+
+            addresses[i] = new InetSocketAddress(ipAddress, port);
+        }
+
+        boolean isSuccess = dataNodeInfoStruct.addDataNodeCluster(clusterName, addresses, entryData);
+
+        if (asyncFuture != null) {
+            ((AsyncFuture<Boolean>)asyncFuture).notifyResult(isSuccess);
+        }
+    }
+
+    /**
+     * 对应于{@link OperateCode#REMOVE_DATANODE_CLUSTER}的数据处理逻辑
+     *
+     * @param entryData 已经完成集群多数派写入的Entry数据
+     * @param asyncFuture {@link AsyncFuture}
+     */
+    private void doRemoveDataNodeCluster(ByteBuf entryData, AsyncFuture<?> asyncFuture) {
+        String clusterName = readString(entryData);
+
+        boolean isSuccess = dataNodeInfoStruct.removeDataNodeCluster(clusterName, entryData);
+
+        if (asyncFuture != null) {
+            ((AsyncFuture<Boolean>)asyncFuture).notifyResult(isSuccess);
         }
     }
 

@@ -1,5 +1,7 @@
-package cn.nova;
+package cn.nova.service;
 
+import cn.nova.AsyncFuture;
+import cn.nova.ByteBufMessage;
 import cn.nova.cluster.RaftCore;
 import cn.nova.network.PathMapping;
 import cn.nova.struct.DataNodeInfoStruct;
@@ -10,17 +12,17 @@ import io.netty.channel.Channel;
 import static cn.nova.OperateCode.*;
 
 /**
- * {@link ViewNodeClientService}负责提供面向客户端、与全局数据视图相关的TCP服务接口
+ * {@link ViewNodeGlobalSystemService}负责提供与整个NovaIO分布式系统相关的TCP服务接口
  *
  * @author RealDragonking
  */
-public final class ViewNodeClientService {
+public final class ViewNodeGlobalSystemService {
 
     private final DataNodeInfoStruct dataNodeInfoStruct;
     private final ByteBufAllocator alloc;
     private final RaftCore raftCore;
 
-    public ViewNodeClientService(RaftCore raftCore, DataNodeInfoStruct dataNodeInfoStruct) {
+    public ViewNodeGlobalSystemService(RaftCore raftCore, DataNodeInfoStruct dataNodeInfoStruct) {
         this.alloc = ByteBufAllocator.DEFAULT;
         this.dataNodeInfoStruct = dataNodeInfoStruct;
         this.raftCore = raftCore;
@@ -54,11 +56,38 @@ public final class ViewNodeClientService {
      * @param byteBuf {@link ByteBuf}字节缓冲区
      */
     @PathMapping(path = "/add-datanode-cluster")
-    public void receiveAddDataNodeInfoRequest(Channel channel, ByteBuf byteBuf) {
+    public void receiveAddDataNodeClusterRequest(Channel channel, ByteBuf byteBuf) {
         long sessionId = byteBuf.readLong();
 
         ByteBuf entryData = alloc.buffer();
-        entryData.writeInt(ADD_NEW_DATANODE_CLUSTER).writeBytes(byteBuf);
+        entryData.writeInt(ADD_DATANODE_CLUSTER).writeBytes(byteBuf);
+
+        byteBuf.release();
+
+        AsyncFuture<Boolean> asyncFuture = raftCore.appendEntryOnLeaderState(entryData);
+        asyncFuture.addListener(result -> {
+            if (result != null) {
+                ByteBufMessage message = ByteBufMessage.build().doWrite(msg -> {
+                    msg.writeLong(sessionId);
+                    msg.writeBoolean(result);
+                });
+                channel.writeAndFlush(message.create());
+            }
+        });
+    }
+
+    /**
+     * 接收并处理请求，删除一个DataNode节点集群，如果不存在则删除失败
+     *
+     * @param channel {@link Channel}通信信道
+     * @param byteBuf {@link ByteBuf}字节缓冲区
+     */
+    @PathMapping(path = "/remove-datanode-cluster")
+    public void receiveRemoveDataNodeClusterRequest(Channel channel, ByteBuf byteBuf) {
+        long sessionId = byteBuf.readLong();
+
+        ByteBuf entryData = alloc.buffer();
+        entryData.writeInt(REMOVE_DATANODE_CLUSTER).writeBytes(byteBuf);
 
         byteBuf.release();
 
