@@ -52,18 +52,16 @@ public class ViewNodeRaftCore extends AbstractRaftCore {
 
         switch (operateCode) {
             case ADD_NEW_DATANODE :
-//                String clusterName = readString(entryData);
-//                String ipAddress = readString(entryData);
-//                int port = entryData.readInt();
-//                InetSocketAddress address = new InetSocketAddress(ipAddress, port);
-//
-//                boolean isSuccess = dataNodeStruct.addNewDataNode(clusterName, address, entryData);
+                String clusterName = readString(entryData);
+                String ipAddress = readString(entryData);
+                int port = entryData.readInt();
+                InetSocketAddress address = new InetSocketAddress(ipAddress, port);
+
+                boolean isSuccess = dataNodeStruct.addNewDataNode(clusterName, address, entryData);
 
                 if (asyncFuture != null) {
-                    ((AsyncFuture<Boolean>)asyncFuture).notifyResult(true);
+                    ((AsyncFuture<Boolean>)asyncFuture).notifyResult(isSuccess);
                 }
-                entryData.release();
-                log.info(entryIndex);
                 break;
         }
     }

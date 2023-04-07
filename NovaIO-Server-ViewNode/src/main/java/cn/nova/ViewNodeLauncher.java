@@ -35,7 +35,7 @@ public final class ViewNodeLauncher {
         NetworkConfig netConfig = new NetworkConfig(srcConfig);
         TimeConfig timeConfig = new TimeConfig(srcConfig);
 
-        LocalStorage storage = initEntryStore();
+        LocalStorage storage = initLocalStorage();
 
         MsgHandler udpHandler = new UDPMsgHandler();
         MsgHandler tcpHandler = new TCPMsgHandler();

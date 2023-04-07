@@ -137,25 +137,25 @@ public final class LaunchUtils {
      *
      * @return {@link LocalStorage}
      */
-    public static LocalStorage initEntryStore() {
+    public static LocalStorage initLocalStorage() {
         LOG.info("正在初始化加载本地数据库...");
 
-        LocalStorage entryStore = null;
+        LocalStorage localStorage = null;
 
         try {
-            entryStore = new LocalStorageImpl();
+            localStorage = new LocalStorageImpl();
         } catch (Exception e) {
             e.printStackTrace();
         }
 
-        if (entryStore == null) {
+        if (localStorage == null) {
             LOG.info("本地数据库加载失败，当前节点进程正在关闭...");
             System.exit(0);
         } else {
             LOG.info("本地数据库加载成功");
         }
 
-        return entryStore;
+        return localStorage;
     }
 
     /**

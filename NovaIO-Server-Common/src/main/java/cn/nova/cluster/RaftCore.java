@@ -20,9 +20,9 @@ public interface RaftCore {
      *
      * @param candidateIndex candidate节点的序列号
      * @param candidateTerm candidate节点竞选的任期
-     * @param applyEntryIndex candidate节点的已应用Entry序列号
+     * @param appliedEntryIndex candidate节点的已应用Entry序列号
      */
-    void receiveVoteRequest(int candidateIndex, long candidateTerm, long applyEntryIndex);
+    void receiveVoteRequest(int candidateIndex, long candidateTerm, long appliedEntryIndex);
 
     /**
      * 处理来自其它节点的投票响应
@@ -55,9 +55,9 @@ public interface RaftCore {
      * 处理来自其他节点的心跳控制响应消息
      *
      * @param nodeIndex 响应节点的序列号
-     * @param applyEntryIndex 响应节点的已应用Entry序列号
+     * @param appliedEntryIndex 响应节点的已应用Entry序列号
      */
-    void receiveHeartbeatResponse(int nodeIndex, long applyEntryIndex);
+    void receiveHeartbeatResponse(int nodeIndex, long appliedEntryIndex);
 
     /**
      * 处理来自其它节点的Entry数据同步响应消息

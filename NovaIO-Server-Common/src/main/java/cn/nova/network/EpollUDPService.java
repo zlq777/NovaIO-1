@@ -11,6 +11,8 @@ import io.netty.channel.socket.DatagramPacket;
 import io.netty.util.concurrent.EventExecutorGroup;
 import io.netty.util.concurrent.UnorderedThreadPoolEventExecutor;
 
+import java.util.concurrent.ThreadFactory;
+
 import static cn.nova.CommonUtils.getThreadFactory;
 
 /**
@@ -30,12 +32,13 @@ public final class EpollUDPService implements UDPService {
     public EpollUDPService(NetworkConfig config, MsgHandler handler) {
         this.config = config;
 
-        this.ioThreadGroup = new EpollEventLoopGroup(
-                config.getUDPioThreadNumber(),
-                getThreadFactory("udp-io", true));
-        this.exeThreadGroup = new UnorderedThreadPoolEventExecutor(
-                config.getUDPexecThreadNumber(),
-                getThreadFactory("udp-exec", true));
+        ThreadFactory threadFactory;
+
+        threadFactory = getThreadFactory("udp-io", true);
+        this.ioThreadGroup = new EpollEventLoopGroup(config.getUDPioThreadNumber(), threadFactory);
+
+        threadFactory = getThreadFactory("udp-exec", true);
+        this.exeThreadGroup = new UnorderedThreadPoolEventExecutor(config.getUDPexecThreadNumber(), threadFactory);
 
         this.bootstrap = new Bootstrap()
                 .group(ioThreadGroup)
@@ -85,11 +88,7 @@ public final class EpollUDPService implements UDPService {
     @Override
     public void send(DatagramPacket packet) {
         Entry entry = this.loopEntry;
-        Channel channel = entry.wrapChannel;
-        EventLoop eventLoop = channel.eventLoop();
-
-        eventLoop.execute(() -> channel.writeAndFlush(packet));
-
+        entry.wrapChannel.writeAndFlush(packet);
         this.loopEntry = entry.next;
     }
 

@@ -88,7 +88,7 @@ public final class ViewNodeClientService {
 
         ByteBufMessage message = ByteBufMessage.build().doWrite(msg -> {
             msg.writeLong(sessionId);
-
+            dataNodeStruct.readDataNodeInfo(msg);
         });
 
         channel.writeAndFlush(message.create());

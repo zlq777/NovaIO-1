@@ -4,5 +4,4 @@ include ':NovaIO-Server-DataNode'
 include ':NovaIO-Server-ViewNode'
 include ':NovaIO-Client'
 include ':NovaIO-Common'
-include 'NovaIO-Server-DataNode'
 

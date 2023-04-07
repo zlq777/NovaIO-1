@@ -38,11 +38,13 @@ public class DataNodeStruct {
      * @param bucket 作为临时载体的{@link ByteBuf}字节缓冲区
      */
     public boolean addNewDataNode(String clusterName, InetSocketAddress address, ByteBuf bucket) {
-        locker.lock();
-        boolean result = addNewDataNode0(clusterName, address, bucket);
-        locker.unlock();
-        bucket.release();
-        return result;
+        try {
+            locker.lock();
+            return addNewDataNode0(clusterName, address, bucket);
+        } finally {
+            locker.unlock();
+            bucket.release();
+        }
     }
 
     /**
@@ -100,7 +102,7 @@ public class DataNodeStruct {
      * @param byteBuf {@link ByteBuf}字节缓冲区
      */
     private void readDataNodeInfo0(ByteBuf byteBuf) {
-
+        //
     }
 
     /**
@@ -126,6 +128,8 @@ public class DataNodeStruct {
                 addrSet.add(new InetSocketAddress(ipAddr, port));
             }
         }
+
+        byteBuf.release();
     }
 
 }

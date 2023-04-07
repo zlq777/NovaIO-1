@@ -98,7 +98,7 @@ public abstract class AbstractRaftCore implements RaftCore {
     /**
      * 已经完成了集群大多数写入、已应用Entry序列号。每个节点的applyIndex可能会不一样
      */
-    private volatile long applyEntryIndex;
+    private volatile long appliedEntryIndex;
     /**
      * pendingEntryIndex表示{@link #pendingEntry}的序列号
      */
@@ -146,7 +146,7 @@ public abstract class AbstractRaftCore implements RaftCore {
         this.sendMsgIntervalTicks = timeConfig.getSendMsgInterval() / tickTime;
 
         this.currentTerm = storage.readLong("term", -1L);
-        this.applyEntryIndex = storage.readLong("apply-entry-index", -1L);
+        this.appliedEntryIndex = storage.readLong("applied-entry-index", -1L);
 
         this.waitTicks = resetWaitTicks = randomElectTicks();
         this.state = RaftState.FOLLOWER;
@@ -229,9 +229,9 @@ public abstract class AbstractRaftCore implements RaftCore {
      *
      * @param newIndex 新的已应用Entry序列号
      */
-    private void changeApplyEntryIndex(long newIndex) {
-        applyEntryIndex = newIndex;
-        storage.writeLong("apply-entry-index", newIndex);
+    private void changeAppliedEntryIndex(long newIndex) {
+        appliedEntryIndex = newIndex;
+        storage.writeLong("applied-entry-index", newIndex);
     }
 
     /**
@@ -255,11 +255,12 @@ public abstract class AbstractRaftCore implements RaftCore {
             if (pendingEntry != null && sendEntryIndex == pendingEntryIndex) {
                 sendEntrySyncMsg(node, sendEntryIndex, true);
                 return;
-            } else if (sendEntryIndex <= applyEntryIndex){
+            } else if (sendEntryIndex <= appliedEntryIndex){
                 sendEntrySyncMsg(node, sendEntryIndex, false);
                 return;
             }
         }
+
         sendHeartbeatMsg(node);
     }
 
@@ -268,16 +269,16 @@ public abstract class AbstractRaftCore implements RaftCore {
      *
      * @param node {@link ClusterNode}
      * @param sendEntryIndex 准备发送的Entry序列号
-     * @param useInSyncEntryData 是否使用正在等待写入集群的Entry数据
+     * @param usePendingEntryData 是否使用正在等待写入集群的Entry数据
      */
-    private void sendEntrySyncMsg(ClusterNode node, long sendEntryIndex, boolean useInSyncEntryData) {
+    private void sendEntrySyncMsg(ClusterNode node, long sendEntryIndex, boolean usePendingEntryData) {
         ByteBuf content = alloc.buffer();
         DatagramPacket packet = new DatagramPacket(content, node.address());
 
         writeString(content, "/msg/entry-sync");
         content.writeInt(index).writeLong(currentTerm).writeLong(sendEntryIndex);
 
-        if (useInSyncEntryData) {
+        if (usePendingEntryData) {
             ByteBuf entryData = pendingEntry.entryData;
 
             entryData.markReaderIndex();
@@ -314,7 +315,7 @@ public abstract class AbstractRaftCore implements RaftCore {
             DatagramPacket packet = new DatagramPacket(content, node.address());
 
             writeString(content, "/vote/request");
-            content.writeInt(index).writeLong(currentTerm).writeLong(applyEntryIndex);
+            content.writeInt(index).writeLong(currentTerm).writeLong(appliedEntryIndex);
 
             udpService.send(packet);
         }
@@ -327,10 +328,10 @@ public abstract class AbstractRaftCore implements RaftCore {
      *
      * @param candidateIndex   candidate节点的序列号
      * @param candidateTerm    candidate节点竞选的任期
-     * @param applyEntryIndex candidate节点的已应用Entry序列号
+     * @param appliedEntryIndex candidate节点的已应用Entry序列号
      */
     @Override
-    public void receiveVoteRequest(int candidateIndex, long candidateTerm, long applyEntryIndex) {
+    public void receiveVoteRequest(int candidateIndex, long candidateTerm, long appliedEntryIndex) {
         ClusterNode node = getNode(candidateIndex);
         ByteBuf content = alloc.buffer();
         DatagramPacket packet = new DatagramPacket(content, node.address());
@@ -339,7 +340,7 @@ public abstract class AbstractRaftCore implements RaftCore {
         content.writeLong(candidateTerm);
 
         locker.lock();
-        if (receiveVoteRequest0(candidateTerm, applyEntryIndex)) {
+        if (receiveVoteRequest0(candidateTerm, appliedEntryIndex)) {
             if (candidateTerm > currentTerm) {
                 changeTerm(candidateTerm);
             }
@@ -349,8 +350,8 @@ public abstract class AbstractRaftCore implements RaftCore {
         }
 
         waitTicks = resetWaitTicks;
-        locker.unlock();
 
+        locker.unlock();
         udpService.send(packet);
     }
 
@@ -358,11 +359,11 @@ public abstract class AbstractRaftCore implements RaftCore {
      * 具体处理来自其它节点的选票获取请求
      *
      * @param candidateTerm  candidate节点竞选的任期
-     * @param applyEntryIndex candidate节点的已应用Entry序列号
+     * @param appliedEntryIndex candidate节点的已应用Entry序列号
      * @return 是否可以给予选票
      */
-    private boolean receiveVoteRequest0(long candidateTerm, long applyEntryIndex) {
-        if (candidateTerm < currentTerm || applyEntryIndex < this.applyEntryIndex) {
+    private boolean receiveVoteRequest0(long candidateTerm, long appliedEntryIndex) {
+        if (candidateTerm < currentTerm || appliedEntryIndex < this.appliedEntryIndex) {
             return false;
         }
 
@@ -443,20 +444,20 @@ public abstract class AbstractRaftCore implements RaftCore {
         InetSocketAddress leaderAddr;
 
         PendingEntry pendingEntry = null;
-        long applyEntryIndex;
+        long appliedEntryIndex, applyEntryIndex = -1L;
 
         locker.lock();
         receiveLeaderMsg(leaderIndex, leaderTerm);
 
         leaderAddr = leader.address();
-        applyEntryIndex = this.applyEntryIndex;
+        appliedEntryIndex = this.appliedEntryIndex;
 
         if (this.pendingEntry != null && inSyncEntryIndex > pendingEntryIndex) {
             pendingEntry = this.pendingEntry;
-            applyEntryIndex = pendingEntryIndex;
+            applyEntryIndex = this.pendingEntryIndex;
 
             storage.writeBytes(applyEntryIndex, pendingEntry.entryData);
-            changeApplyEntryIndex(applyEntryIndex);
+            changeAppliedEntryIndex(applyEntryIndex);
 
             this.pendingEntry = null;
         }
@@ -466,7 +467,7 @@ public abstract class AbstractRaftCore implements RaftCore {
         DatagramPacket packet = new DatagramPacket(content, leaderAddr);
 
         writeString(content, "/msg/heartbeat/response");
-        content.writeInt(index).writeLong(applyEntryIndex);
+        content.writeInt(index).writeLong(appliedEntryIndex);
 
         udpService.send(packet);
 
@@ -495,24 +496,24 @@ public abstract class AbstractRaftCore implements RaftCore {
 
         leaderAddr = leader.address();
 
-        if (entryIndex > applyEntryIndex) {
+        if (entryIndex > appliedEntryIndex) {
             if (this.pendingEntry != null) {
-                if (entryIndex > pendingEntryIndex) {
+                if (entryIndex > this.pendingEntryIndex) {
 
                     pendingEntry = this.pendingEntry;
-                    applyEntryIndex = pendingEntryIndex;
+                    applyEntryIndex = this.pendingEntryIndex;
 
                     storage.writeBytes(applyEntryIndex, pendingEntry.entryData);
-                    changeApplyEntryIndex(applyEntryIndex);
+                    changeAppliedEntryIndex(applyEntryIndex);
 
                     this.pendingEntry = new PendingEntry(entryData, null);
-                    pendingEntryIndex = entryIndex;
+                    this.pendingEntryIndex = entryIndex;
                 } else {
                     entryData.release();
                 }
             } else {
                 this.pendingEntry = new PendingEntry(entryData, null);
-                pendingEntryIndex = entryIndex;
+                this.pendingEntryIndex = entryIndex;
             }
         } else {
             entryData.release();
@@ -569,15 +570,15 @@ public abstract class AbstractRaftCore implements RaftCore {
      * 处理来自其他节点的心跳控制响应消息
      *
      * @param nodeIndex         响应节点的序列号
-     * @param applyEntryIndex 响应节点的已应用Entry序列号
+     * @param appliedEntryIndex 响应节点的已应用Entry序列号
      */
     @Override
-    public void receiveHeartbeatResponse(int nodeIndex, long applyEntryIndex) {
+    public void receiveHeartbeatResponse(int nodeIndex, long appliedEntryIndex) {
         locker.lock();
         if (state == RaftState.LEADER) {
             ClusterNode node = getNode(nodeIndex);
             if (! node.hasChecked()) {
-                node.setInSyncEntryIndex(applyEntryIndex + 1);
+                node.setInSyncEntryIndex(appliedEntryIndex + 1);
             }
         }
         locker.unlock();
@@ -612,7 +613,7 @@ public abstract class AbstractRaftCore implements RaftCore {
                     onlySendOne = false;
 
                     storage.writeBytes(applyEntryIndex, pendingEntry.entryData);
-                    changeApplyEntryIndex(applyEntryIndex);
+                    changeAppliedEntryIndex(applyEntryIndex);
 
                     if ((this.pendingEntry = pendingEntryQueue.poll()) != null) {
                         syncedNodeNumber = 1;
@@ -650,7 +651,7 @@ public abstract class AbstractRaftCore implements RaftCore {
             if (pendingEntry == null) {
                 syncedNodeNumber = 1;
                 pendingEntry = newEntry;
-                pendingEntryIndex = applyEntryIndex + 1;
+                pendingEntryIndex = appliedEntryIndex + 1;
                 sendEntrySyncMsg();
             } else {
                 pendingEntryQueue.offer(newEntry);

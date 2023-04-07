@@ -19,14 +19,9 @@ public class Test {
         };
 
         NovaIOClient client = NovaIOClients.create(addresses);
-        for (int i = 0; i < 10000; i++) {
-            int finalI = i;
-            client.addNewDataNode("niubi", new InetSocketAddress("127.0.0.1", i))
-                    .addListener(result -> {
-                        if (result != null) {
-                            log.info(finalI);
-                        }
-                    });
-        }
+        client.addNewDataNode("鸡你太美", new InetSocketAddress("127.0.0.1", 4010))
+                .addListener(result -> {
+
+                });
     }
 }

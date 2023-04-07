@@ -10,10 +10,12 @@ import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.util.concurrent.EventExecutorGroup;
 import io.netty.util.concurrent.UnorderedThreadPoolEventExecutor;
 
+import java.util.concurrent.ThreadFactory;
+
 import static cn.nova.CommonUtils.getThreadFactory;
 
 /**
- * {@link UDPService}的通用级实现，可以被允许运行在所有操作系统上，缺点是只能启用一个读线程
+ * {@link UDPService}的通用级实现，可以被允许运行在所有操作系统上，缺点是只能启用一个io线程
  *
  * @author RealDragonking
  */
@@ -28,12 +30,13 @@ public final class GeneralUDPService implements UDPService {
     public GeneralUDPService(NetworkConfig config, MsgHandler handler) {
         this.config = config;
 
-        this.ioThreadGroup = new NioEventLoopGroup(
-                config.getUDPioThreadNumber(),
-                getThreadFactory("udp-io", true));
-        this.exeThreadGroup = new UnorderedThreadPoolEventExecutor(
-                config.getUDPexecThreadNumber(),
-                getThreadFactory("udp-exec", true));
+        ThreadFactory threadFactory;
+
+        threadFactory = getThreadFactory("udp-io", true);
+        this.ioThreadGroup = new NioEventLoopGroup(1, threadFactory);
+
+        threadFactory = getThreadFactory("udp-exec", true);
+        this.exeThreadGroup = new UnorderedThreadPoolEventExecutor(config.getUDPexecThreadNumber(), threadFactory);
 
         this.bootstrap = new Bootstrap()
                 .group(ioThreadGroup)
@@ -70,7 +73,7 @@ public final class GeneralUDPService implements UDPService {
      */
     @Override
     public void send(DatagramPacket packet) {
-        ioThreadGroup.execute(() -> channel.writeAndFlush(packet));
+        channel.writeAndFlush(packet);
     }
 
     /**
