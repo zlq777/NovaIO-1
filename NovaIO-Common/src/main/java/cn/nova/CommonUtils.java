@@ -4,7 +4,9 @@ import io.netty.buffer.ByteBuf;
 import io.netty.util.concurrent.FastThreadLocal;
 import io.netty.util.internal.ThreadLocalRandom;
 
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.Comparator;
 import java.util.concurrent.ThreadFactory;
 
 /**
@@ -118,6 +120,24 @@ public final class CommonUtils {
                 | ((long)(bucket[5] & 0xff)) << 40
                 | ((long)(bucket[6] & 0xff)) << 48
                 | ((long)(bucket[7] & 0xff)) << 56;
+    }
+
+    /**
+     * 创建一个可以比较{@link InetSocketAddress}的{@link Comparator}
+     *
+     * @return {@link Comparator}
+     */
+    public static Comparator<InetSocketAddress> createAddressComparator() {
+        return (addr1, addr2) -> {
+            String ip1 = addr1.getAddress().getHostAddress();
+            String ip2 = addr2.getAddress().getHostAddress();
+            int res = ip1.compareTo(ip2);
+            if (res == 0) {
+                return Integer.compare(addr1.getPort(), addr2.getPort());
+            } else {
+                return res;
+            }
+        };
     }
 
 }

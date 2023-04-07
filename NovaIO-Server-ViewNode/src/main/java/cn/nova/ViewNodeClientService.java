@@ -1,6 +1,8 @@
 package cn.nova;
 
+import cn.nova.cluster.RaftCore;
 import cn.nova.network.PathMapping;
+import cn.nova.struct.DataNodeStruct;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
@@ -14,11 +16,13 @@ import static cn.nova.OperateCode.*;
  */
 public final class ViewNodeClientService {
 
+    private final DataNodeStruct dataNodeStruct;
     private final ByteBufAllocator alloc;
-    private final ViewNodeRaftCore raftCore;
+    private final RaftCore raftCore;
 
-    public ViewNodeClientService(ViewNodeRaftCore raftCore) {
+    public ViewNodeClientService(RaftCore raftCore, DataNodeStruct dataNodeStruct) {
         this.alloc = ByteBufAllocator.DEFAULT;
+        this.dataNodeStruct = dataNodeStruct;
         this.raftCore = raftCore;
     }
 
@@ -58,11 +62,12 @@ public final class ViewNodeClientService {
 
         byteBuf.release();
 
-        AsyncFuture<Long> asyncFuture = raftCore.appendEntryOnLeaderState(entryData);
+        AsyncFuture<Boolean> asyncFuture = raftCore.appendEntryOnLeaderState(entryData);
         asyncFuture.addListener(result -> {
             if (result != null) {
                 ByteBufMessage message = ByteBufMessage.build().doWrite(msg -> {
                     msg.writeLong(sessionId);
+                    msg.writeBoolean(result);
                 });
                 channel.writeAndFlush(message.create());
             }
@@ -83,6 +88,7 @@ public final class ViewNodeClientService {
 
         ByteBufMessage message = ByteBufMessage.build().doWrite(msg -> {
             msg.writeLong(sessionId);
+
         });
 
         channel.writeAndFlush(message.create());

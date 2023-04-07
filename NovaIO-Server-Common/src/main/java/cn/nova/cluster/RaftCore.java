@@ -76,14 +76,13 @@ public interface RaftCore {
     <T> AsyncFuture<T> appendEntryOnLeaderState(ByteBuf entryData);
 
     /**
-     * 应用已经完成集群多数派写入的Entry数据。leader节点需要返回响应数据结构体
+     * 应用已经完成集群多数派写入的Entry数据，leader节点会额外给出对应客户端请求的{@link AsyncFuture}
      *
-     * @param isLeader 当前节点是否作为leader节点完成了这一Entry数据的同步
      * @param entryIndex 已经完成集群多数派写入的Entry序列号
      * @param entryData 已经完成集群多数派写入的Entry数据
      * @param asyncFuture {@link AsyncFuture}
      */
-    void applyEntry(boolean isLeader, long entryIndex, ByteBuf entryData, AsyncFuture<?> asyncFuture);
+    void applyEntry(long entryIndex, ByteBuf entryData, AsyncFuture<?> asyncFuture);
 
     /**
      * 获取到当前节点是否是Leader身份

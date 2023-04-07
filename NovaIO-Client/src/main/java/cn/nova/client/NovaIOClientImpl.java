@@ -112,17 +112,17 @@ final class NovaIOClientImpl implements NovaIOClient {
     private class UpdateDataNodeInfoTask implements Runnable {
         @Override
         public void run() {
-            AsyncFuture<QueryDataNodeInfoResult> asyncFuture = AsyncFuture.of(QueryDataNodeInfoResult.class);
-            long sessionId = asyncFuture.getSessionId();
-
-            ByteBufMessage message = ByteBufMessage.build("/query-datanode-info")
-                    .doWrite(msg -> msg.writeLong(sessionId));
-
-            viewNodeClient.sendMessage(message.create(), asyncFuture);
-
-            asyncFuture.addListener(result -> {
-
-            });
+//            AsyncFuture<QueryDataNodeInfoResult> asyncFuture = AsyncFuture.of(QueryDataNodeInfoResult.class);
+//            long sessionId = asyncFuture.getSessionId();
+//
+//            ByteBufMessage message = ByteBufMessage.build("/query-datanode-info")
+//                    .doWrite(msg -> msg.writeLong(sessionId));
+//
+//            viewNodeClient.sendMessage(message.create(), asyncFuture);
+//
+//            asyncFuture.addListener(result -> {
+//
+//            });
 
             viewNodeClient.timer.newTimeout(t -> run(), updateInterval, TimeUnit.MILLISECONDS);
         }

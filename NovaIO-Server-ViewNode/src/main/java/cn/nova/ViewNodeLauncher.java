@@ -6,6 +6,7 @@ import cn.nova.config.NetworkConfig;
 import cn.nova.config.SourceConfig;
 import cn.nova.config.TimeConfig;
 import cn.nova.network.*;
+import cn.nova.struct.DataNodeStruct;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.util.HashedWheelTimer;
 import io.netty.util.ResourceLeakDetector;
@@ -50,7 +51,10 @@ public final class ViewNodeLauncher {
                 tickTime,
                 TimeUnit.MILLISECONDS);
 
-        ViewNodeRaftCore raftCore = new ViewNodeRaftCore(
+        DataNodeStruct dataNodeStruct = new DataNodeStruct(storage);
+
+        RaftCore raftCore = new ViewNodeRaftCore(
+                dataNodeStruct,
                 clusterInfo,
                 ByteBufAllocator.DEFAULT,
                 timeConfig,
@@ -61,7 +65,7 @@ public final class ViewNodeLauncher {
 
         udpHandler.register(new RaftService(raftCore));
 
-        tcpHandler.register(new ViewNodeClientService(raftCore));
+        tcpHandler.register(new ViewNodeClientService(raftCore, dataNodeStruct));
 
         onShutdown(() -> {
             udpService.close();
