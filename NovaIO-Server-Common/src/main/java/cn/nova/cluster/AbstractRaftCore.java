@@ -17,6 +17,8 @@ import java.net.InetSocketAddress;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static cn.nova.CommonUtils.*;
 
@@ -34,6 +36,7 @@ public abstract class AbstractRaftCore implements RaftCore {
     private final ByteBufAllocator alloc;
     private final UDPService udpService;
     private final LocalStorage storage;
+    private final Lock locker;
     private final Timer timer;
 
     /**
@@ -130,6 +133,7 @@ public abstract class AbstractRaftCore implements RaftCore {
 
         this.otherNodes = clusterInfo.getOtherNodes();
         this.pendingEntryQueue = new ConcurrentLinkedQueue<>();
+        this.locker = new ReentrantLock();
         this.udpService = udpService;
         this.storage = storage;
         this.timer = timer;
@@ -157,23 +161,23 @@ public abstract class AbstractRaftCore implements RaftCore {
             @Override
             public void run(Timeout timeout) {
                 timer.newTimeout(this, 0, TimeUnit.MILLISECONDS);
-                synchronized (AbstractRaftCore.this) {
-                    if (waitTicks == 0) {
-                        switch (state) {
-                            case LEADER:
-                                waitTicks = sendMsgIntervalTicks;
-                                sendEntrySyncMsg();
-                                break;
-                            case FOLLOWER:
-                                state = RaftState.CANDIDATE;
-                                leader = null;
-                            case CANDIDATE:
-                                startNewVote();
-                        }
-                    } else {
-                        waitTicks --;
+                locker.lock();
+                if (waitTicks == 0) {
+                    switch (state) {
+                        case LEADER:
+                            waitTicks = sendMsgIntervalTicks;
+                            sendEntrySyncMsg();
+                            break;
+                        case FOLLOWER:
+                            state = RaftState.CANDIDATE;
+                            leader = null;
+                        case CANDIDATE:
+                            startNewVote();
                     }
+                } else {
+                    waitTicks --;
                 }
+                locker.unlock();
             }
         };
         timer.newTimeout(timerTask, 0, TimeUnit.MILLISECONDS);
@@ -334,18 +338,18 @@ public abstract class AbstractRaftCore implements RaftCore {
         writeString(content, "/vote/response");
         content.writeLong(candidateTerm);
 
-        synchronized (this) {
-            if (receiveVoteRequest0(candidateTerm, applyEntryIndex)) {
-                if (candidateTerm > currentTerm) {
-                    changeTerm(candidateTerm);
-                }
-                content.writeBoolean(true);
-            } else {
-                content.writeBoolean(false);
+        locker.lock();
+        if (receiveVoteRequest0(candidateTerm, applyEntryIndex)) {
+            if (candidateTerm > currentTerm) {
+                changeTerm(candidateTerm);
             }
-
-            waitTicks = resetWaitTicks;
+            content.writeBoolean(true);
+        } else {
+            content.writeBoolean(false);
         }
+
+        waitTicks = resetWaitTicks;
+        locker.unlock();
 
         udpService.send(packet);
     }
@@ -386,11 +390,11 @@ public abstract class AbstractRaftCore implements RaftCore {
      */
     @Override
     public void receiveVoteResponse(long voteTerm, boolean isSuccess) {
-        synchronized (this) {
-            if (voteTerm == currentTerm && state == RaftState.CANDIDATE) {
-                receiveVoteResponse0(isSuccess);
-            }
+        locker.lock();
+        if (voteTerm == currentTerm && state == RaftState.CANDIDATE) {
+            receiveVoteResponse0(isSuccess);
         }
+        locker.unlock();
     }
 
     /**
@@ -441,22 +445,22 @@ public abstract class AbstractRaftCore implements RaftCore {
         PendingEntry pendingEntry = null;
         long applyEntryIndex;
 
-        synchronized (this) {
-            receiveLeaderMsg(leaderIndex, leaderTerm);
+        locker.lock();
+        receiveLeaderMsg(leaderIndex, leaderTerm);
 
-            leaderAddr = leader.address();
-            applyEntryIndex = this.applyEntryIndex;
+        leaderAddr = leader.address();
+        applyEntryIndex = this.applyEntryIndex;
 
-            if (this.pendingEntry != null && inSyncEntryIndex > pendingEntryIndex) {
-                pendingEntry = this.pendingEntry;
-                applyEntryIndex = pendingEntryIndex;
+        if (this.pendingEntry != null && inSyncEntryIndex > pendingEntryIndex) {
+            pendingEntry = this.pendingEntry;
+            applyEntryIndex = pendingEntryIndex;
 
-                storage.writeBytes(applyEntryIndex, pendingEntry.entryData);
-                changeApplyEntryIndex(applyEntryIndex);
+            storage.writeBytes(applyEntryIndex, pendingEntry.entryData);
+            changeApplyEntryIndex(applyEntryIndex);
 
-                this.pendingEntry = null;
-            }
+            this.pendingEntry = null;
         }
+        locker.unlock();
 
         ByteBuf content = alloc.buffer();
         DatagramPacket packet = new DatagramPacket(content, leaderAddr);
@@ -486,34 +490,34 @@ public abstract class AbstractRaftCore implements RaftCore {
         PendingEntry pendingEntry = null;
         long applyEntryIndex = -1L;
 
-        synchronized (this) {
-            receiveLeaderMsg(leaderIndex, leaderTerm);
+        locker.lock();
+        receiveLeaderMsg(leaderIndex, leaderTerm);
 
-            leaderAddr = leader.address();
+        leaderAddr = leader.address();
 
-            if (entryIndex > applyEntryIndex) {
-                if (this.pendingEntry != null) {
-                    if (entryIndex > pendingEntryIndex) {
+        if (entryIndex > applyEntryIndex) {
+            if (this.pendingEntry != null) {
+                if (entryIndex > pendingEntryIndex) {
 
-                        pendingEntry = this.pendingEntry;
-                        applyEntryIndex = pendingEntryIndex;
+                    pendingEntry = this.pendingEntry;
+                    applyEntryIndex = pendingEntryIndex;
 
-                        storage.writeBytes(applyEntryIndex, pendingEntry.entryData);
-                        changeApplyEntryIndex(applyEntryIndex);
+                    storage.writeBytes(applyEntryIndex, pendingEntry.entryData);
+                    changeApplyEntryIndex(applyEntryIndex);
 
-                        this.pendingEntry = new PendingEntry(entryData, null);
-                        pendingEntryIndex = entryIndex;
-                    } else {
-                        entryData.release();
-                    }
-                } else {
                     this.pendingEntry = new PendingEntry(entryData, null);
                     pendingEntryIndex = entryIndex;
+                } else {
+                    entryData.release();
                 }
             } else {
-                entryData.release();
+                this.pendingEntry = new PendingEntry(entryData, null);
+                pendingEntryIndex = entryIndex;
             }
+        } else {
+            entryData.release();
         }
+        locker.unlock();
 
         ByteBuf content = alloc.buffer();
         DatagramPacket packet = new DatagramPacket(content, leaderAddr);
@@ -569,14 +573,14 @@ public abstract class AbstractRaftCore implements RaftCore {
      */
     @Override
     public void receiveHeartbeatResponse(int nodeIndex, long applyEntryIndex) {
-        synchronized (this) {
-            if (state == RaftState.LEADER) {
-                ClusterNode node = getNode(nodeIndex);
-                if (! node.hasChecked()) {
-                    node.setInSyncEntryIndex(applyEntryIndex + 1);
-                }
+        locker.lock();
+        if (state == RaftState.LEADER) {
+            ClusterNode node = getNode(nodeIndex);
+            if (! node.hasChecked()) {
+                node.setInSyncEntryIndex(applyEntryIndex + 1);
             }
         }
+        locker.unlock();
     }
 
     /**
@@ -590,40 +594,40 @@ public abstract class AbstractRaftCore implements RaftCore {
         PendingEntry pendingEntry = null;
         long applyEntryIndex = -1L;
 
-        synchronized (this) {
-            if (state == RaftState.LEADER) {
+        locker.lock();
+        if (state == RaftState.LEADER) {
 
-                ClusterNode node = getNode(nodeIndex);
-                boolean onlySendOne = true;
+            ClusterNode node = getNode(nodeIndex);
+            boolean onlySendOne = true;
 
-                if (syncedEntryIndex == node.inSyncEntryIndex()) {
-                    node.setInSyncEntryIndex(syncedEntryIndex + 1);
-                }
+            if (syncedEntryIndex == node.inSyncEntryIndex()) {
+                node.setInSyncEntryIndex(syncedEntryIndex + 1);
+            }
 
-                if (this.pendingEntry != null && syncedEntryIndex == pendingEntryIndex) {
-                    if (++ syncedNodeNumber == majority) {
+            if (this.pendingEntry != null && syncedEntryIndex == pendingEntryIndex) {
+                if (++ syncedNodeNumber == majority) {
 
-                        pendingEntry = this.pendingEntry;
-                        applyEntryIndex = pendingEntryIndex;
-                        onlySendOne = false;
+                    pendingEntry = this.pendingEntry;
+                    applyEntryIndex = pendingEntryIndex;
+                    onlySendOne = false;
 
-                        storage.writeBytes(applyEntryIndex, pendingEntry.entryData);
-                        changeApplyEntryIndex(applyEntryIndex);
+                    storage.writeBytes(applyEntryIndex, pendingEntry.entryData);
+                    changeApplyEntryIndex(applyEntryIndex);
 
-                        if ((this.pendingEntry = pendingEntryQueue.poll()) != null) {
-                            syncedNodeNumber = 1;
-                            pendingEntryIndex = applyEntryIndex + 1;
-                        }
+                    if ((this.pendingEntry = pendingEntryQueue.poll()) != null) {
+                        syncedNodeNumber = 1;
+                        pendingEntryIndex = applyEntryIndex + 1;
                     }
                 }
+            }
 
-                if (onlySendOne) {
-                    sendEntrySyncMsg(node);
-                } else {
-                    sendEntrySyncMsg();
-                }
+            if (onlySendOne) {
+                sendEntrySyncMsg(node);
+            } else {
+                sendEntrySyncMsg();
             }
         }
+        locker.unlock();
 
         if (pendingEntry != null) {
             applyEntry(applyEntryIndex, pendingEntry.entryData, pendingEntry.asyncFuture);
@@ -641,21 +645,21 @@ public abstract class AbstractRaftCore implements RaftCore {
         AsyncFuture<T> asyncFuture = AsyncFuture.of(null);
         PendingEntry newEntry = new PendingEntry(entryData, asyncFuture);
 
-        synchronized (this) {
-            if (state == RaftState.LEADER) {
-                if (pendingEntry == null) {
-                    syncedNodeNumber = 1;
-                    pendingEntry = newEntry;
-                    pendingEntryIndex = applyEntryIndex + 1;
-                    sendEntrySyncMsg();
-                } else {
-                    pendingEntryQueue.offer(newEntry);
-                }
+        locker.lock();
+        if (state == RaftState.LEADER) {
+            if (pendingEntry == null) {
+                syncedNodeNumber = 1;
+                pendingEntry = newEntry;
+                pendingEntryIndex = applyEntryIndex + 1;
+                sendEntrySyncMsg();
             } else {
-                entryData.release();
-                asyncFuture.notifyResult(null);
+                pendingEntryQueue.offer(newEntry);
             }
+        } else {
+            entryData.release();
+            asyncFuture.notifyResult(null);
         }
+        locker.unlock();
 
         return asyncFuture;
     }
