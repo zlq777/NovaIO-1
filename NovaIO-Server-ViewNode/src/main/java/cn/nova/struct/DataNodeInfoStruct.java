@@ -25,11 +25,11 @@ public class DataNodeInfoStruct {
     }
 
     /**
-     * 新增一个DataNode节点集群，如果不存在则成功创建，已经存在则返回失败
+     * 新增一个DataNode节点集群，如果已经存在则创建失败
      *
      * @param clusterName 集群名称
      * @param addresses 所有节点的{@link InetSocketAddress}列表
-     * @param byteBuf 用于读写的{@link ByteBuf}字节缓冲区。复用已有的，减少了二次创建
+     * @param byteBuf 用于读写的{@link ByteBuf}字节缓冲区。复用已有的，去掉了二次创建带来的开销
      * @return 是否成功创建
      */
     public boolean addNewDataNodeCluster(String clusterName, InetSocketAddress[] addresses, ByteBuf byteBuf) {

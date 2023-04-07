@@ -48,7 +48,7 @@ public final class ViewNodeClientService {
     }
 
     /**
-     * 接收并处理请求，新增一个DataNode节点集群，如果不存在则成功创建，已经存在则返回失败
+     * 接收并处理请求，新增一个DataNode节点集群，如果已经存在则创建失败
      *
      * @param channel {@link Channel}通信信道
      * @param byteBuf {@link ByteBuf}字节缓冲区
