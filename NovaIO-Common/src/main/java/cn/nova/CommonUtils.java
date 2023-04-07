@@ -7,6 +7,8 @@ import io.netty.util.internal.ThreadLocalRandom;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.ThreadFactory;
 
 /**
@@ -123,11 +125,20 @@ public final class CommonUtils {
     }
 
     /**
+     * 创建一个可以存储{@link InetSocketAddress}的{@link java.util.Set}，默认使用{@link TreeSet}
+     *
+     * @return {@link java.util.Set}
+     */
+    public static Set<InetSocketAddress> createAddrSet() {
+        return new TreeSet<>(createAddrComparator());
+    }
+
+    /**
      * 创建一个可以比较{@link InetSocketAddress}的{@link Comparator}
      *
      * @return {@link Comparator}
      */
-    public static Comparator<InetSocketAddress> createAddressComparator() {
+    public static Comparator<InetSocketAddress> createAddrComparator() {
         return (addr1, addr2) -> {
             String ip1 = addr1.getAddress().getHostAddress();
             String ip2 = addr2.getAddress().getHostAddress();

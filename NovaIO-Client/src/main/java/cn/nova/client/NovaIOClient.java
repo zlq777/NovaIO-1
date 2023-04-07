@@ -14,13 +14,13 @@ import java.net.InetSocketAddress;
 public interface NovaIOClient {
 
     /**
-     * 往一个DataNode集群的信息结构体中，加入一个新节点的{@link InetSocketAddress}
+     * 新增一个DataNode节点集群，如果不存在则成功创建，已经存在则返回失败
      *
-     * @param clusterName 集群名称，如果不存在会进行创建
-     * @param address {@link InetSocketAddress}
+     * @param clusterName 集群名称
+     * @param addresses 所有节点的{@link InetSocketAddress}列表
      * @return {@link AsyncFuture}
      */
-    AsyncFuture<ChangeDataNodeInfoResult> addNewDataNode(String clusterName, InetSocketAddress address);
+    AsyncFuture<ChangeDataNodeInfoResult> addNewDataNodeCluster(String clusterName, InetSocketAddress[] addresses);
 
     /**
      * 安全且优雅地关闭客户端

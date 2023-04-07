@@ -7,7 +7,10 @@ import cn.nova.client.result.QueryLeaderResult;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 
-import java.util.Map;
+import java.net.InetSocketAddress;
+import java.util.*;
+
+import static cn.nova.CommonUtils.*;
 
 /**
  * {@link ResponseMsgHandler}负责处理来自NovaIO服务节点的响应消息
@@ -63,9 +66,30 @@ public class ResponseMsgHandler extends ChannelInboundHandlerAdapter {
 
         } else if (typeClass == QueryDataNodeInfoResult.class) {
 
+            Map<String, Set<InetSocketAddress>> map = new HashMap<>();
+            QueryDataNodeInfoResult result = new QueryDataNodeInfoResult(map);
 
+            while (byteBuf.readableBytes() > 0) {
+
+                Set<InetSocketAddress> addrSet = createAddrSet();
+                String clusterName = readString(byteBuf);
+                int nodeNumber = byteBuf.readInt();
+
+                while (nodeNumber-- > 0){
+                    String ipAddr = readString(byteBuf);
+                    int port = byteBuf.readInt();
+
+                    addrSet.add(new InetSocketAddress(ipAddr, port));
+                }
+
+                map.put(clusterName, addrSet);
+            }
+
+            ((AsyncFuture<QueryDataNodeInfoResult>)future).notifyResult(result);
 
         }
+
+        byteBuf.release();
     }
 
     /**

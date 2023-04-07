@@ -4,7 +4,7 @@ import cn.nova.cluster.AbstractRaftCore;
 import cn.nova.cluster.ClusterInfo;
 import cn.nova.config.TimeConfig;
 import cn.nova.network.UDPService;
-import cn.nova.struct.DataNodeStruct;
+import cn.nova.struct.DataNodeInfoStruct;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.util.Timer;
@@ -24,9 +24,9 @@ import static cn.nova.CommonUtils.*;
 public class ViewNodeRaftCore extends AbstractRaftCore {
 
     private static final Logger log = LogManager.getLogger(ViewNodeRaftCore.class);
-    private final DataNodeStruct dataNodeStruct;
+    private final DataNodeInfoStruct dataNodeInfoStruct;
 
-    public ViewNodeRaftCore(DataNodeStruct dataNodeStruct,
+    public ViewNodeRaftCore(DataNodeInfoStruct dataNodeInfoStruct,
                             ClusterInfo clusterInfo,
                             ByteBufAllocator alloc,
                             TimeConfig timeConfig,
@@ -35,7 +35,7 @@ public class ViewNodeRaftCore extends AbstractRaftCore {
                             Timer timer,
                             int tickTime) {
         super(clusterInfo, alloc, timeConfig, udpService, storage, timer, tickTime);
-        this.dataNodeStruct = dataNodeStruct;
+        this.dataNodeInfoStruct = dataNodeInfoStruct;
     }
 
     /**
@@ -51,13 +51,20 @@ public class ViewNodeRaftCore extends AbstractRaftCore {
         int operateCode = entryData.readInt();
 
         switch (operateCode) {
-            case ADD_NEW_DATANODE :
+            case ADD_NEW_DATANODE_CLUSTER:
                 String clusterName = readString(entryData);
-                String ipAddress = readString(entryData);
-                int port = entryData.readInt();
-                InetSocketAddress address = new InetSocketAddress(ipAddress, port);
+                int nodeNumber = entryData.readInt();
 
-                boolean isSuccess = dataNodeStruct.addNewDataNode(clusterName, address, entryData);
+                InetSocketAddress[] addresses = new InetSocketAddress[nodeNumber];
+
+                for (int i = 0; i < nodeNumber; i++) {
+                    String ipAddress = readString(entryData);
+                    int port = entryData.readInt();
+
+                    addresses[i] = new InetSocketAddress(ipAddress, port);
+                }
+
+                boolean isSuccess = dataNodeInfoStruct.addNewDataNodeCluster(clusterName, addresses, entryData);
 
                 if (asyncFuture != null) {
                     ((AsyncFuture<Boolean>)asyncFuture).notifyResult(isSuccess);

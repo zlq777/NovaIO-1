@@ -2,7 +2,7 @@ package cn.nova;
 
 import cn.nova.cluster.RaftCore;
 import cn.nova.network.PathMapping;
-import cn.nova.struct.DataNodeStruct;
+import cn.nova.struct.DataNodeInfoStruct;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
@@ -16,13 +16,13 @@ import static cn.nova.OperateCode.*;
  */
 public final class ViewNodeClientService {
 
-    private final DataNodeStruct dataNodeStruct;
+    private final DataNodeInfoStruct dataNodeInfoStruct;
     private final ByteBufAllocator alloc;
     private final RaftCore raftCore;
 
-    public ViewNodeClientService(RaftCore raftCore, DataNodeStruct dataNodeStruct) {
+    public ViewNodeClientService(RaftCore raftCore, DataNodeInfoStruct dataNodeInfoStruct) {
         this.alloc = ByteBufAllocator.DEFAULT;
-        this.dataNodeStruct = dataNodeStruct;
+        this.dataNodeInfoStruct = dataNodeInfoStruct;
         this.raftCore = raftCore;
     }
 
@@ -48,17 +48,17 @@ public final class ViewNodeClientService {
     }
 
     /**
-     * 接收并处理请求，往一个DataNode集群的信息结构体中，加入一个新节点的{@link java.net.InetSocketAddress}
+     * 接收并处理请求，新增一个DataNode节点集群，如果不存在则成功创建，已经存在则返回失败
      *
      * @param channel {@link Channel}通信信道
      * @param byteBuf {@link ByteBuf}字节缓冲区
      */
-    @PathMapping(path = "/add-datanode-info")
+    @PathMapping(path = "/add-datanode-cluster")
     public void receiveAddDataNodeInfoRequest(Channel channel, ByteBuf byteBuf) {
         long sessionId = byteBuf.readLong();
 
         ByteBuf entryData = alloc.buffer();
-        entryData.writeInt(ADD_NEW_DATANODE).writeBytes(byteBuf);
+        entryData.writeInt(ADD_NEW_DATANODE_CLUSTER).writeBytes(byteBuf);
 
         byteBuf.release();
 
@@ -88,7 +88,7 @@ public final class ViewNodeClientService {
 
         ByteBufMessage message = ByteBufMessage.build().doWrite(msg -> {
             msg.writeLong(sessionId);
-            dataNodeStruct.readDataNodeInfo(msg);
+            dataNodeInfoStruct.readDataNodeInfo(msg);
         });
 
         channel.writeAndFlush(message.create());

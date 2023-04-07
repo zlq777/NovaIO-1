@@ -130,7 +130,7 @@ public class LocalStorageImpl implements LocalStorage {
             byteBuf.readBytes(valueBytes, 0, length);
             byteBuf.readerIndex(readerIndex);
 
-            rocksDB.put(keyBytes, 0, 8, valueBytes, 0, length);
+            rocksDB.put(keyBytes, 0, keyBytes.length, valueBytes, 0, length);
         } catch (Exception e) {
             e.printStackTrace();
         }
