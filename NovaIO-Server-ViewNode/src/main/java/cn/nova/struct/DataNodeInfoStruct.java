@@ -30,6 +30,7 @@ public class DataNodeInfoStruct {
 
         this.entityStore.executeInReadonlyTransaction(txn -> {
             for (Entity clusterInfo : txn.getAll(DATANODE_CLUSTER)) {
+
                 String name = parse(clusterInfo.getProperty("name"));
                 EntityIterable addresses = clusterInfo.getLinks("address");
 
@@ -102,6 +103,7 @@ public class DataNodeInfoStruct {
      */
     public void readDataNodeInfo(ByteBuf byteBuf) {
         for (Map.Entry<String, Set<InetSocketAddress>> clusterInfo : clusterInfoMap.entrySet()) {
+
             Set<InetSocketAddress> addrSet = clusterInfo.getValue();
             String clusterName = clusterInfo.getKey();
 
