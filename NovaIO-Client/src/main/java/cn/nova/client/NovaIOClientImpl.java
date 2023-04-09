@@ -72,7 +72,7 @@ final class NovaIOClientImpl implements NovaIOClient {
         RaftClusterNode[] clusterNodes = new RaftClusterNode[nodeNumber];
 
         for (int i = 0; i < nodeNumber; i++) {
-            clusterNodes[i] = new RaftClusterNode(addresses[i], clusterName);
+            clusterNodes[i] = new RaftClusterNode(addresses[i]);
         }
 
         RaftClusterClient client = new RaftClusterClient(clusterName, clusterNodes,
@@ -126,7 +126,7 @@ final class NovaIOClientImpl implements NovaIOClient {
                 RaftClusterNode[] clusterNodes = new RaftClusterNode[nodeNumber];
 
                 for (InetSocketAddress address : addrSet) {
-                    clusterNodes[-- nodeNumber] = new RaftClusterNode(address, clusterName);
+                    clusterNodes[-- nodeNumber] = new RaftClusterNode(address);
                 }
 
                 RaftClusterClient client = new RaftClusterClient("DataNode-" + clusterName, clusterNodes, null);
@@ -438,13 +438,11 @@ final class NovaIOClientImpl implements NovaIOClient {
 
         private final AtomicBoolean connectMonitor;
         private final InetSocketAddress address;
-        private final String clusterName;
         private volatile boolean isClosed;
         private Channel channel;
 
-        private RaftClusterNode(InetSocketAddress address, String clusterName) {
+        private RaftClusterNode(InetSocketAddress address) {
             this.connectMonitor = new AtomicBoolean();
-            this.clusterName = clusterName;
             this.address = address;
             this.isClosed = false;
         }
@@ -462,11 +460,11 @@ final class NovaIOClientImpl implements NovaIOClient {
                         channel.close();
                     } else {
                         this.channel = channel;
-                        log.info("成功连接到位于 {} 的 {} 节点", address, clusterName);
+                        log.info("成功连接到位于 {} 的节点", address);
                     }
                 } else {
                     if (! isClosed) {
-                        log.info("无法连接到位于 {} 的 {} 节点，准备稍后重试...", address, clusterName);
+                        log.info("无法连接到位于 {} 的节点，准备稍后重试...", address);
                     }
                 }
             }
@@ -480,7 +478,7 @@ final class NovaIOClientImpl implements NovaIOClient {
                 if (channel != null) {
                     channel.close();
                     channel = null;
-                    log.info("客户端关闭，与位于 {} 的 {} 节点连接自动断开", address, clusterName);
+                    log.info("客户端关闭，与位于 {} 的节点连接自动断开", address);
                 }
             }
         }
@@ -496,7 +494,7 @@ final class NovaIOClientImpl implements NovaIOClient {
                 if (this.channel != null && channel == this.channel) {
                     this.channel.close();
                     this.channel = null;
-                    log.info("响应超时，与位于 {} 的 {} 节点连接自动断开", address, clusterName);
+                    log.info("响应超时，与位于 {} 的节点连接自动断开", address);
                 }
             }
         }
