@@ -6,9 +6,11 @@ import cn.nova.DynamicCounter;
 import cn.nova.client.result.*;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.EventLoopGroup;
+import io.netty.channel.*;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.util.HashedWheelTimer;
 import io.netty.util.Timer;
 import org.apache.logging.log4j.LogManager;
@@ -32,31 +34,30 @@ import static cn.nova.CommonUtils.*;
 final class NovaIOClientImpl implements NovaIOClient {
 
     private static final Logger log = LogManager.getLogger(NovaIOClientImpl.class);
+    private static final int MAX_FRAME_LENGTH = 65535;
     private final Map<String, RaftClusterClient> dataNodeClientMap;
     private final Map<Long, AsyncFuture<?>> sessionMap;
     private final RaftClusterClient viewNodeClient;
-    private final EventLoopGroup ioThreadGroup;
-    private final Bootstrap bootstrap;
+    private final ResponseHandler responseHandler;
     private final int timeout;
+    private final int ioThreadNumber;
     private final int updateInterval;
     private final int reconnectInterval;
 
-    NovaIOClientImpl(Map<Long, AsyncFuture<?>> sessionMap,
-                     InetSocketAddress[] addresses,
-                     EventLoopGroup ioThreadGroup,
-                     Bootstrap bootstrap,
+    NovaIOClientImpl(InetSocketAddress[] addresses,
                      int timeout,
+                     int ioThreadNumber,
                      int updateInterval,
                      int reconnectInterval) {
 
         this.dataNodeClientMap = new ConcurrentHashMap<>();
-        this.ioThreadGroup = ioThreadGroup;
-        this.sessionMap = sessionMap;
-        this.bootstrap = bootstrap;
-        this.timeout = timeout;
-        this.updateInterval = updateInterval;
+        this.sessionMap = new ConcurrentHashMap<>();
         this.reconnectInterval = reconnectInterval;
+        this.updateInterval = updateInterval;
+        this.ioThreadNumber = ioThreadNumber;
+        this.timeout = timeout;
 
+        this.responseHandler = new ResponseHandler(sessionMap);
         this.viewNodeClient = initViewNodeClient(addresses);
     }
 
@@ -196,8 +197,10 @@ final class NovaIOClientImpl implements NovaIOClient {
      */
     @Override
     public void close() {
-        ioThreadGroup.shutdownGracefully();
         viewNodeClient.close();
+        for (RaftClusterClient client : dataNodeClientMap.values()) {
+            client.close();
+        }
     }
 
     /**
@@ -223,22 +226,41 @@ final class NovaIOClientImpl implements NovaIOClient {
         private final AtomicBoolean updateLeaderState;
         private final Runnable leaderFirstUpdateTask;
         private final RaftClusterNode[] clusterNodes;
+        private final EventLoopGroup ioThreadGroup;
+        private final Bootstrap bootstrap;
         private final Timer timer;
         private volatile boolean leaderFirstUpdate;
         private volatile long leaderTerm;
         private Channel leaderChannel;
 
-        private RaftClusterClient(String clusterName, RaftClusterNode[] clusterNodes, Runnable leaderFirstUpdateTask) {
+        private RaftClusterClient(String clusterName,
+                                  RaftClusterNode[] clusterNodes,
+                                  Runnable leaderFirstUpdateTask) {
+
             ThreadFactory timerThreadFactory = getThreadFactory(clusterName + "-Timer", false);
+            ThreadFactory ioThreadFactory = getThreadFactory(clusterName + "-io", true);
 
             this.leaderFirstUpdateTask = leaderFirstUpdateTask;
             this.clusterNodes = clusterNodes;
             this.leaderFirstUpdate = true;
             this.leaderTerm = -1L;
 
+            this.ioThreadGroup = new NioEventLoopGroup(ioThreadNumber, ioThreadFactory);
             this.updateLeaderState = new AtomicBoolean(true);
             this.pendingMessageQueue = new ConcurrentLinkedQueue<>();
             this.timer = new HashedWheelTimer(timerThreadFactory);
+
+            this.bootstrap = new Bootstrap()
+                .group(ioThreadGroup)
+                .channel(NioSocketChannel.class)
+                .handler(new ChannelInitializer<SocketChannel>() {
+                    @Override
+                    protected void initChannel(SocketChannel ch) {
+                        ChannelPipeline pipeline = ch.pipeline();
+                        pipeline.addLast(new LengthFieldBasedFrameDecoder(MAX_FRAME_LENGTH, 0, 4, 0, 4))
+                                .addLast(responseHandler);
+                    }
+                });
         }
 
         /**
@@ -420,6 +442,8 @@ final class NovaIOClientImpl implements NovaIOClient {
          */
         private void close() {
             timer.stop();
+            ioThreadGroup.shutdownGracefully();
+
             for (RaftClusterNode node : clusterNodes) {
                 node.isClosed = true;
                 node.disconnect();

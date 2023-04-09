@@ -13,15 +13,16 @@ import java.util.*;
 import static cn.nova.CommonUtils.*;
 
 /**
- * {@link ResponseMsgHandler}负责处理来自NovaIO服务节点的响应消息
+ * {@link ResponseHandler}负责处理来自NovaIO服务节点的响应消息
  *
  * @author RealDragonking
  */
-public class ResponseMsgHandler extends ChannelInboundHandlerAdapter {
+@ChannelHandler.Sharable
+public class ResponseHandler extends ChannelInboundHandlerAdapter {
 
     private final Map<Long, AsyncFuture<?>> sessionMap;
 
-    public ResponseMsgHandler(Map<Long, AsyncFuture<?>> sessionMap) {
+    public ResponseHandler(Map<Long, AsyncFuture<?>> sessionMap) {
         this.sessionMap = sessionMap;
     }
 
