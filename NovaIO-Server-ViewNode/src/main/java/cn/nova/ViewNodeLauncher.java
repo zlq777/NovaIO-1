@@ -69,9 +69,9 @@ public final class ViewNodeLauncher {
         tcpHandler.register(new GlobalSystemService(raftCore, dataNodeInfoStruct));
 
         onShutdown(() -> {
-            networkGroup.close();
-            networkGroup.close();
             timer.stop();
+            networkGroup.close();
+            storageGroup.close();
         });
 
         startUDPService(udpService);

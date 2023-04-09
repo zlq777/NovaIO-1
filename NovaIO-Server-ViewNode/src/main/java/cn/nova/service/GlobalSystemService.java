@@ -9,7 +9,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
 
-import static cn.nova.OperateCode.*;
+import static cn.nova.CommandType.*;
 
 /**
  * {@link GlobalSystemService}负责提供与整个NovaIO分布式系统相关的TCP服务接口

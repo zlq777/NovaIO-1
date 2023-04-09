@@ -2,14 +2,17 @@ package cn.nova.struct;
 
 import cn.nova.LocalStorageGroup;
 import io.netty.buffer.ByteBuf;
+import jetbrains.exodus.entitystore.Entity;
+import jetbrains.exodus.entitystore.EntityIterable;
 import jetbrains.exodus.entitystore.PersistentEntityStore;
 
 import java.net.InetSocketAddress;
-import java.util.*;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static cn.nova.CommonUtils.*;
+import static cn.nova.EntityType.*;
 
 /**
  * {@link DataNodeInfoStruct}是DataNode集群相关的信息结构体
@@ -18,15 +21,30 @@ import static cn.nova.CommonUtils.*;
  */
 public class DataNodeInfoStruct {
 
-    private final Map<String, Set<InetSocketAddress>> dataNodeInfoMap;
+    private final Map<String, Set<InetSocketAddress>> clusterInfoMap;
     private final PersistentEntityStore entityStore;
-    private final Lock locker;
 
     public DataNodeInfoStruct(LocalStorageGroup storageGroup) {
         this.entityStore = storageGroup.getEntityStore();
-        this.dataNodeInfoMap = new HashMap<>();
-        this.locker = new ReentrantLock();
-        initDataNodeInfoMap();
+        this.clusterInfoMap = new ConcurrentHashMap<>();
+
+        this.entityStore.executeInReadonlyTransaction(txn -> {
+            for (Entity clusterInfo : txn.getAll(DATANODE_CLUSTER)) {
+                String name = parse(clusterInfo.getProperty("name"));
+                EntityIterable addresses = clusterInfo.getLinks("address");
+
+                Set<InetSocketAddress> addrSet = createAddrSet();
+
+                clusterInfoMap.put(name, addrSet);
+
+                for (Entity address : addresses) {
+                    String ipAddr = parse(address.getProperty("ip"));
+                    int port = parse(address.getProperty("port"));
+
+                    addrSet.add(new InetSocketAddress(ipAddr, port));
+                }
+            }
+        });
     }
 
     /**
@@ -37,7 +55,28 @@ public class DataNodeInfoStruct {
      * @return 是否成功创建
      */
     public boolean addDataNodeCluster(String clusterName, InetSocketAddress[] addresses) {
-        return true;
+        return entityStore.computeInExclusiveTransaction(txn -> {
+            if (clusterInfoMap.containsKey(clusterName)) {
+                return false;
+            }
+            Set<InetSocketAddress> addrSet = createAddrSet();
+
+            Entity clusterInfo = txn.newEntity(DATANODE_CLUSTER);
+            clusterInfo.setProperty("name", clusterName);
+
+            for (InetSocketAddress address : addresses) {
+                Entity addrEntity = txn.newEntity(DATANODE_CLUSTER_ADDRESS);
+
+                addrEntity.setProperty("ip", address.getAddress().getHostAddress());
+                addrEntity.setProperty("port", address.getPort());
+
+                clusterInfo.addLink("address", addrEntity);
+                addrSet.add(address);
+            }
+
+            clusterInfoMap.put(clusterName, addrSet);
+            return true;
+        });
     }
 
     /**
@@ -47,7 +86,13 @@ public class DataNodeInfoStruct {
      * @return 是否成功删除
      */
     public boolean removeDataNodeCluster(String clusterName) {
-        return true;
+        return entityStore.computeInExclusiveTransaction(txn -> {
+            if (txn.find(DATANODE_CLUSTER, "name", clusterName).isEmpty()) {
+                return false;
+            }
+            // TODO
+            return true;
+        });
     }
 
     /**
@@ -56,14 +101,15 @@ public class DataNodeInfoStruct {
      * @param byteBuf {@link ByteBuf}字节缓冲区
      */
     public void readDataNodeInfo(ByteBuf byteBuf) {
-        locker.lock();
-        for (Map.Entry<String, Set<InetSocketAddress>> entry : dataNodeInfoMap.entrySet()) {
-            Set<InetSocketAddress> addrSet = entry.getValue();
+        for (Map.Entry<String, Set<InetSocketAddress>> clusterInfo : clusterInfoMap.entrySet()) {
+            Set<InetSocketAddress> addrSet = clusterInfo.getValue();
+            String clusterName = clusterInfo.getKey();
 
-            writeString(byteBuf, entry.getKey());
+            writeString(byteBuf, clusterName);
             byteBuf.writeInt(addrSet.size());
 
             for (InetSocketAddress addr : addrSet) {
+
                 String ipAddr = addr.getAddress().getHostAddress();
                 int port = addr.getPort();
 
@@ -71,14 +117,6 @@ public class DataNodeInfoStruct {
                 byteBuf.writeInt(port);
             }
         }
-        locker.unlock();
-    }
-
-    /**
-     * 从硬盘中初始化加载所有DataNode集群的信息，并写入到{@link #dataNodeInfoMap}中
-     */
-    private void initDataNodeInfoMap() {
-
     }
 
 }

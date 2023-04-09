@@ -1,7 +1,7 @@
 package cn.nova;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.util.concurrent.FastThreadLocal;
+import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.ThreadLocalRandom;
 
 import java.net.InetSocketAddress;
@@ -34,14 +34,14 @@ public final class CommonUtils {
     }
 
     /**
-     * 把字符串的长度和内容写入此{@link ByteBuf}
+     * 把{@link String}字符串的长度和内容写入此{@link ByteBuf}
      *
      * @param byteBuf {@link ByteBuf}字节缓冲区
-     * @param string {@link String}
+     * @param value {@link String}
      */
-    public static void writeString(ByteBuf byteBuf, String string) {
+    public static void writeString(ByteBuf byteBuf, String value) {
         int writerIdx = byteBuf.writerIndex() + 4;
-        int pathLen = byteBuf.writerIndex(writerIdx).writeCharSequence(string, StandardCharsets.UTF_8);
+        int pathLen = byteBuf.writerIndex(writerIdx).writeCharSequence(value, StandardCharsets.UTF_8);
         byteBuf.writerIndex(writerIdx - 4)
                 .writeInt(pathLen)
                 .writerIndex(writerIdx + pathLen);
@@ -76,55 +76,6 @@ public final class CommonUtils {
     }
 
     /**
-     * 提供一个能够获取byte[]的{@link FastThreadLocal}
-     *
-     * @param size byte[]的大小
-     * @return {@link FastThreadLocal}
-     */
-    public static FastThreadLocal<byte[]> getByteBucket(int size) {
-        return new FastThreadLocal<>() {
-            @Override
-            protected byte[] initialValue() {
-                return new byte[size];
-            }
-        };
-    }
-
-    /**
-     * 往byte[]中写入long值
-     *
-     * @param bucket byte[]
-     * @param l long
-     */
-    public static void parseLongToByte(byte[] bucket, long l) {
-        bucket[0] = (byte) (l & 0xff);
-        bucket[1] = (byte) (l >>> 8 & 0xff);
-        bucket[2] = (byte) (l >>> 16 & 0xff);
-        bucket[3] = (byte) (l >>> 24 & 0xff);
-        bucket[4] = (byte) (l >>> 32 & 0xff);
-        bucket[5] = (byte) (l >>> 40 & 0xff);
-        bucket[6] = (byte) (l >>> 48 & 0xff);
-        bucket[7] = (byte) (l >>> 56 & 0xff);
-    }
-
-    /**
-     * 从byte[]中读取long
-     *
-     * @param bucket byte[]
-     * @return long
-     */
-    public static long parseByteToLong(byte[] bucket) {
-        return ((long)(bucket[0] & 0xff))
-                | ((long)(bucket[1] & 0xff)) << 8
-                | ((long)(bucket[2] & 0xff)) << 16
-                | ((long)(bucket[3] & 0xff)) << 24
-                | ((long)(bucket[4] & 0xff)) << 32
-                | ((long)(bucket[5] & 0xff)) << 40
-                | ((long)(bucket[6] & 0xff)) << 48
-                | ((long)(bucket[7] & 0xff)) << 56;
-    }
-
-    /**
      * 创建一个可以存储{@link InetSocketAddress}的{@link java.util.Set}，默认使用{@link TreeSet}
      *
      * @return {@link java.util.Set}
@@ -149,6 +100,18 @@ public final class CommonUtils {
                 return res;
             }
         };
+    }
+
+    /**
+     * 尝试将{@link Comparable}强转为任意类型的返回值
+     *
+     * @param comparable {@link Comparable}
+     * @return 任意类型的返回值
+     * @param <T> 想要得到的类型
+     */
+    @SuppressWarnings("unchecked")
+    public static <T> T parse(Comparable<?> comparable) {
+        return (T) ObjectUtil.checkNotNull(comparable, "此comparable不应为null");
     }
 
 }

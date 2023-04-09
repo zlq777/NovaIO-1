@@ -138,9 +138,9 @@ public abstract class AbstractRaftCore implements RaftCore {
                             Timer timer,
                             int tickTime) {
 
-        this.otherNodes = clusterInfo.getOtherNodes();
         this.pendingEntryQueue = new ConcurrentLinkedQueue<>();
         this.entityStore = storageGroup.getEntityStore();
+        this.otherNodes = clusterInfo.getOtherNodes();
         this.kvStore = storageGroup.getKVStore();
         this.locker = new ReentrantLock();
         this.udpService = udpService;
@@ -156,8 +156,8 @@ public abstract class AbstractRaftCore implements RaftCore {
         this.currentTerm = kvStore.read("term", -1L);
         this.appliedEntryIndex = kvStore.read("applied-entry-index", -1L);
 
-        this.waitTicks = resetWaitTicks = randomElectTicks();
         this.state = RaftState.FOLLOWER;
+        this.waitTicks = resetWaitTicks = randomElectTicks();
     }
 
     /**
@@ -173,9 +173,14 @@ public abstract class AbstractRaftCore implements RaftCore {
                 if (waitTicks == 0) {
                     switch (state) {
                         case LEADER:
+                            for (ClusterNode node : otherNodes) {
+                                if (node.isSendEnable()) {
+                                    sendEntrySyncMsg(node);
+                                } else {
+                                    sendHeartbeatMsg(node);
+                                }
+                            }
                             waitTicks = sendMsgIntervalTicks;
-                            sendHeartbeatMsg();
-                            sendEntrySyncMsg();
                             break;
                         case FOLLOWER:
                             state = RaftState.CANDIDATE;
@@ -285,8 +290,8 @@ public abstract class AbstractRaftCore implements RaftCore {
         }
 
         if (nextSyncEntryIndex <= appliedEntryIndex) {
-            boolean isNull = entityStore.computeInReadonlyTransaction(trans -> {
-                EntityIterable entries = trans.find("entry", "index", nextSyncEntryIndex);
+            boolean isNull = entityStore.computeInReadonlyTransaction(txn -> {
+                EntityIterable entries = txn.find("entry", "index", nextSyncEntryIndex);
                 Entity entry = entries.getFirst();
 
                 if (entry == null) {
@@ -306,26 +311,6 @@ public abstract class AbstractRaftCore implements RaftCore {
             if (isNull) {
                 findNextSyncEntry(node, nextSyncEntryIndex);
             }
-        }
-    }
-
-    /**
-     * 向所有{@link ClusterNode}节点发送Entry条目同步数据
-     */
-    private void sendEntrySyncMsg() {
-        for (ClusterNode node : otherNodes) {
-            if (node.isSendEnable()) {
-                sendEntrySyncMsg(node);
-            }
-        }
-    }
-
-    /**
-     * 向所有{@link ClusterNode}节点发送心跳信息
-     */
-    private void sendHeartbeatMsg() {
-        for (ClusterNode node : otherNodes) {
-            sendHeartbeatMsg(node);
         }
     }
 
@@ -682,7 +667,6 @@ public abstract class AbstractRaftCore implements RaftCore {
                 }
             } else {
                 ClusterNode node = getNode(nodeIndex);
-
                 if (syncedEntryIndex == appliedEntryIndex) {
                     sendHeartbeatMsg(node);
                 } else {

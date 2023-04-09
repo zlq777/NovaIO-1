@@ -11,7 +11,7 @@ import io.netty.util.Timer;
 
 import java.net.InetSocketAddress;
 
-import static cn.nova.OperateCode.*;
+import static cn.nova.CommandType.*;
 import static cn.nova.CommonUtils.*;
 
 /**
@@ -60,7 +60,7 @@ public final class ViewNodeRaftCore extends AbstractRaftCore {
     }
 
     /**
-     * 对应于{@link OperateCode#ADD_DATANODE_CLUSTER}的数据处理逻辑
+     * 对应于{@link CommandType#ADD_DATANODE_CLUSTER}的数据处理逻辑
      *
      * @param entryData 已经完成集群多数派写入的Entry数据
      * @param asyncFuture {@link AsyncFuture}
@@ -86,7 +86,7 @@ public final class ViewNodeRaftCore extends AbstractRaftCore {
     }
 
     /**
-     * 对应于{@link OperateCode#REMOVE_DATANODE_CLUSTER}的数据处理逻辑
+     * 对应于{@link CommandType#REMOVE_DATANODE_CLUSTER}的数据处理逻辑
      *
      * @param entryData 已经完成集群多数派写入的Entry数据
      * @param asyncFuture {@link AsyncFuture}
