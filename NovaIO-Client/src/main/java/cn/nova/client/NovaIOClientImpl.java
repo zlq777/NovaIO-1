@@ -314,6 +314,7 @@ final class NovaIOClientImpl implements NovaIOClient {
 
                         future.addListener(f -> {
                             if (f.isSuccess()) {
+                                log.info("成功连接到位于 {} 的 {} 节点", node.address, clusterName);
                                 node.channel = channel;
                             } else {
                                 log.info("无法连接到位于 {} 的 {} 节点，准备稍后重试...", node.address, clusterName);

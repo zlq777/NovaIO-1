@@ -57,9 +57,11 @@ public class DataNodeInfoStruct {
      */
     public boolean addDataNodeCluster(String clusterName, InetSocketAddress[] addresses) {
         return entityStore.computeInExclusiveTransaction(txn -> {
+
             if (clusterInfoMap.containsKey(clusterName)) {
                 return false;
             }
+
             Set<InetSocketAddress> addrSet = createAddrSet();
 
             Entity clusterInfo = txn.newEntity(DATANODE_CLUSTER);
@@ -91,7 +93,17 @@ public class DataNodeInfoStruct {
             if (txn.find(DATANODE_CLUSTER, "name", clusterName).isEmpty()) {
                 return false;
             }
-            // TODO
+
+            Entity clusterInfo = txn.find(DATANODE_CLUSTER, "name", clusterName).getFirst();
+
+            if (clusterInfo != null) {
+                for (Entity addrEntity : clusterInfo.getLinks("address")) {
+                    addrEntity.delete();
+                }
+                clusterInfo.delete();
+            }
+
+            clusterInfoMap.remove(clusterName);
             return true;
         });
     }

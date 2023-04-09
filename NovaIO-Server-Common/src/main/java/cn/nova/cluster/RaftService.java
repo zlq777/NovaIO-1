@@ -11,10 +11,10 @@ import io.netty.channel.socket.DatagramPacket;
  */
 public final class RaftService {
 
-    private final RaftCore stateMachine;
+    private final RaftCore raftCore;
 
-    public RaftService(RaftCore stateMachine) {
-        this.stateMachine = stateMachine;
+    public RaftService(RaftCore raftCore) {
+        this.raftCore = raftCore;
     }
 
     /**
@@ -29,7 +29,7 @@ public final class RaftService {
         long candidateTerm = content.readLong();
         long syncedEntryIndex = content.readLong();
 
-        stateMachine.receiveVoteRequest(candidateIndex, candidateTerm, syncedEntryIndex);
+        raftCore.receiveVoteRequest(candidateIndex, candidateTerm, syncedEntryIndex);
         packet.release();
     }
 
@@ -44,7 +44,7 @@ public final class RaftService {
         long voteTerm = content.readLong();
         boolean isSuccess = content.readBoolean();
 
-        stateMachine.receiveVoteResponse(voteTerm, isSuccess);
+        raftCore.receiveVoteResponse(voteTerm, isSuccess);
         packet.release();
     }
 
@@ -60,7 +60,7 @@ public final class RaftService {
         long leaderTerm = content.readLong();
         long applicableEntryIndex = content.readLong();
 
-        stateMachine.receiveHeartbeatMsg(leaderIndex, leaderTerm, applicableEntryIndex);
+        raftCore.receiveHeartbeatMsg(leaderIndex, leaderTerm, applicableEntryIndex);
         packet.release();
     }
 
@@ -75,7 +75,7 @@ public final class RaftService {
         int nodeIndex = content.readInt();
         long appliedEntryIndex = content.readLong();
 
-        stateMachine.receiveHeartbeatResponse(nodeIndex, appliedEntryIndex);
+        raftCore.receiveHeartbeatResponse(nodeIndex, appliedEntryIndex);
         packet.release();
     }
 
@@ -91,7 +91,7 @@ public final class RaftService {
         long leaderTerm = content.readLong();
         long entryIndex = content.readLong();
 
-        stateMachine.receiveEntrySyncMsg(leaderIndex, leaderTerm, entryIndex, content);
+        raftCore.receiveEntrySyncMsg(leaderIndex, leaderTerm, entryIndex, content);
     }
 
     /**
@@ -105,7 +105,7 @@ public final class RaftService {
         int nodeIndex = content.readInt();
         long syncedEntryIndex = content.readLong();
 
-        stateMachine.receiveEntrySyncResponse(nodeIndex, syncedEntryIndex);
+        raftCore.receiveEntrySyncResponse(nodeIndex, syncedEntryIndex);
         packet.release();
     }
 
