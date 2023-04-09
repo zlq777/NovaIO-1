@@ -98,4 +98,9 @@ public interface RaftCore {
      */
     long getCurrentTerm();
 
+    /**
+     * 关闭此{@link RaftCore}
+     */
+    void close();
+
 }

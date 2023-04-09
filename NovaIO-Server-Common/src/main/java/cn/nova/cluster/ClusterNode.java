@@ -1,5 +1,8 @@
 package cn.nova.cluster;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+
 import java.net.InetSocketAddress;
 
 /**
@@ -9,27 +12,17 @@ import java.net.InetSocketAddress;
  */
 public final class ClusterNode {
 
-    private final int index;
     private final InetSocketAddress address;
+    private final ByteBuf inSyncEntryData;
     private volatile long inSyncEntryIndex;
+    private volatile boolean isSendEnable;
 
-    public ClusterNode(int index, InetSocketAddress address) {
-        this.index = index;
+    public ClusterNode(InetSocketAddress address) {
+        this.inSyncEntryData = ByteBufAllocator.DEFAULT.buffer();
         this.address = address;
     }
 
     /**
-     * 获取到此{@link ClusterNode}的序列号
-     *
-     * @return 节点的序列号
-     */
-    public int index() {
-        return this.index;
-    }
-
-    /**
-     * 获取到正在和此节点进行同步的Entry序列号
-     *
      * @return 正在和此节点进行同步的Entry序列号
      */
     public long inSyncEntryIndex() {
@@ -46,12 +39,26 @@ public final class ClusterNode {
     }
 
     /**
-     * 获取到此{@link ClusterNode}是否已经经过Entry一致性检测
+     * 设置是否可以发送Entry数据
      *
-     * @return 是否已经经过Entry一致性检测
+     * @param isSendEnable 是否可以发送Entry数据
      */
-    public boolean hasChecked() {
-        return inSyncEntryIndex > -1L;
+    public void setSendEnable(boolean isSendEnable) {
+        this.isSendEnable = isSendEnable;
+    }
+
+    /**
+     * @return 是否可以发送Entry数据
+     */
+    public boolean isSendEnable() {
+        return this.isSendEnable;
+    }
+
+    /**
+     * @return 正在和此节点进行同步的Entry数据
+     */
+    public ByteBuf inSyncEntryData() {
+        return this.inSyncEntryData;
     }
 
     /**

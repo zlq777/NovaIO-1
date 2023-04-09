@@ -36,14 +36,14 @@ public final class ViewNodeLauncher {
         NetworkConfig netConfig = new NetworkConfig(srcConfig);
         TimeConfig timeConfig = new TimeConfig(srcConfig);
 
-        LocalStorage storage = initLocalStorage();
+        LocalStorageGroup storageGroup = initLocalStorage();
 
         MsgHandler udpHandler = new UDPMsgHandler();
         MsgHandler tcpHandler = new TCPMsgHandler();
 
-        NetworkServiceGroup group = selectNetworkService(netConfig, udpHandler, tcpHandler);
-        UDPService udpService = group.getUdpService();
-        TCPService tcpService = group.getTcpService();
+        NetworkServiceGroup networkGroup = selectNetworkService(netConfig, udpHandler, tcpHandler);
+        UDPService udpService = networkGroup.getUdpService();
+        TCPService tcpService = networkGroup.getTcpService();
 
         int tickTime = 20;
 
@@ -52,15 +52,15 @@ public final class ViewNodeLauncher {
                 tickTime,
                 TimeUnit.MILLISECONDS);
 
-        DataNodeInfoStruct dataNodeInfoStruct = new DataNodeInfoStruct(storage);
+        DataNodeInfoStruct dataNodeInfoStruct = new DataNodeInfoStruct(storageGroup);
 
         RaftCore raftCore = new ViewNodeRaftCore(
                 dataNodeInfoStruct,
+                storageGroup,
                 clusterInfo,
                 ByteBufAllocator.DEFAULT,
                 timeConfig,
                 udpService,
-                storage,
                 timer,
                 tickTime);
 
@@ -69,9 +69,8 @@ public final class ViewNodeLauncher {
         tcpHandler.register(new GlobalSystemService(raftCore, dataNodeInfoStruct));
 
         onShutdown(() -> {
-            udpService.close();
-            tcpService.close();
-            storage.close();
+            networkGroup.close();
+            networkGroup.close();
             timer.stop();
         });
 

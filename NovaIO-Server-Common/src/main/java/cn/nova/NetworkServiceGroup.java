@@ -1,7 +1,10 @@
-package cn.nova.network;
+package cn.nova;
+
+import cn.nova.network.TCPService;
+import cn.nova.network.UDPService;
 
 /**
- * {@link NetworkServiceGroup}是一个中转传递类，便于方便地返回{@link UDPService}和{@link TCPService}的具体实现类
+ * {@link NetworkServiceGroup}是一个中转传递类，便于返回{@link UDPService}和{@link TCPService}的具体实现类
  *
  * @author RealDragonking
  */
@@ -31,6 +34,14 @@ public final class NetworkServiceGroup {
      */
     public TCPService getTcpService() {
         return this.tcpService;
+    }
+
+    /**
+     * 关闭{@link UDPService}和{@link TCPService}
+     */
+    public void close() {
+        udpService.close();
+        tcpService.close();
     }
 
 }

@@ -25,14 +25,15 @@ public final class ViewNodeRaftCore extends AbstractRaftCore {
     private final DataNodeInfoStruct dataNodeInfoStruct;
 
     public ViewNodeRaftCore(DataNodeInfoStruct dataNodeInfoStruct,
+                            LocalStorageGroup storageGroup,
                             ClusterInfo clusterInfo,
                             ByteBufAllocator alloc,
                             TimeConfig timeConfig,
                             UDPService udpService,
-                            LocalStorage storage,
                             Timer timer,
                             int tickTime) {
-        super(clusterInfo, alloc, timeConfig, udpService, storage, timer, tickTime);
+
+        super(storageGroup, clusterInfo, alloc, timeConfig, udpService, timer, tickTime);
         this.dataNodeInfoStruct = dataNodeInfoStruct;
     }
 
@@ -48,13 +49,14 @@ public final class ViewNodeRaftCore extends AbstractRaftCore {
         int operateCode = entryData.readInt();
 
         switch (operateCode) {
-            case ADD_DATANODE_CLUSTER:
+            case ADD_DATANODE_CLUSTER :
                 doAddDataNodeCluster(entryData, asyncFuture);
                 break;
             case REMOVE_DATANODE_CLUSTER :
                 doRemoveDataNodeCluster(entryData, asyncFuture);
                 break;
         }
+        entryData.release();
     }
 
     /**
@@ -76,7 +78,7 @@ public final class ViewNodeRaftCore extends AbstractRaftCore {
             addresses[i] = new InetSocketAddress(ipAddress, port);
         }
 
-        boolean isSuccess = dataNodeInfoStruct.addDataNodeCluster(clusterName, addresses, entryData);
+        boolean isSuccess = dataNodeInfoStruct.addDataNodeCluster(clusterName, addresses);
 
         if (asyncFuture != null) {
             ((AsyncFuture<Boolean>)asyncFuture).notifyResult(isSuccess);
@@ -92,7 +94,7 @@ public final class ViewNodeRaftCore extends AbstractRaftCore {
     private void doRemoveDataNodeCluster(ByteBuf entryData, AsyncFuture<?> asyncFuture) {
         String clusterName = readString(entryData);
 
-        boolean isSuccess = dataNodeInfoStruct.removeDataNodeCluster(clusterName, entryData);
+        boolean isSuccess = dataNodeInfoStruct.removeDataNodeCluster(clusterName);
 
         if (asyncFuture != null) {
             ((AsyncFuture<Boolean>)asyncFuture).notifyResult(isSuccess);

@@ -7,8 +7,12 @@ import cn.nova.config.SourceConfig;
 import cn.nova.network.*;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
+import com.github.artbits.quickio.api.KV;
+import com.github.artbits.quickio.core.QuickIO;
 import io.netty.channel.epoll.Epoll;
 import io.netty.util.internal.PlatformDependent;
+import jetbrains.exodus.entitystore.PersistentEntityStore;
+import jetbrains.exodus.entitystore.PersistentEntityStores;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -71,8 +75,6 @@ public final class LaunchUtils {
 
                 int index = rootInfo.getIntValue("index", -1);
                 JSONObject[] otherNodeInfos = rootInfo.getObject("other-nodes", JSONObject[].class);
-
-                int num = 0;
                 List<ClusterNode> tempList = new ArrayList<>();
 
                 if (otherNodeInfos != null && index > -1) {
@@ -83,15 +85,16 @@ public final class LaunchUtils {
 
                         if (host != null) {
                             InetSocketAddress address = new InetSocketAddress(host, port);
-                            ClusterNode node = new ClusterNode(num, address);
+                            ClusterNode node = new ClusterNode(address);
 
                             tempList.add(node);
-                            num ++;
                         }
                     }
 
-                    ClusterNode[] otherNodes = new ClusterNode[num];
-                    for (int i = 0; i < num; i++) {
+                    int nodeNumber = tempList.size();
+                    ClusterNode[] otherNodes = new ClusterNode[nodeNumber];
+
+                    for (int i = 0; i < nodeNumber; i++) {
                         otherNodes[i] = tempList.get(i);
                     }
 
@@ -133,17 +136,21 @@ public final class LaunchUtils {
     }
 
     /**
-     * 初始化加载{@link LocalStorage}
+     * 初始化加载{@link com.github.artbits.quickio.api.KV}和{@link jetbrains.exodus.entitystore.PersistentEntityStore}，
+     * 并通过{@link LocalStorageGroup}打包返回
      *
-     * @return {@link LocalStorage}
+     * @return {@link LocalStorageGroup}
      */
-    public static LocalStorage initLocalStorage() {
+    public static LocalStorageGroup initLocalStorage() {
         LOG.info("正在初始化加载本地数据库...");
 
-        LocalStorage localStorage = null;
+        LocalStorageGroup localStorage = null;
 
         try {
-            localStorage = new LocalStorageImpl();
+            KV kvStore = QuickIO.usingKV(".");
+            PersistentEntityStore entityStore = PersistentEntityStores.newInstance("data");
+
+            localStorage = new LocalStorageGroup(kvStore, entityStore);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -159,7 +166,7 @@ public final class LaunchUtils {
     }
 
     /**
-     * 基于当前运行环境，选择合适的{@link UDPService}和{@link TCPService}
+     * 基于当前运行环境，选择合适的{@link UDPService}和{@link TCPService}，并通过{@link NetworkServiceGroup}打包返回
      *
      * @param config {@link NetworkConfig}
      * @param udpHandler 处理udp通信的{@link MsgHandler}
