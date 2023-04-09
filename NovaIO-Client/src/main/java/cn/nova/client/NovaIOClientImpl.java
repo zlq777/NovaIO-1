@@ -69,14 +69,13 @@ final class NovaIOClientImpl implements NovaIOClient {
      */
     private RaftClusterClient initViewNodeClient(InetSocketAddress[] addresses) {
         int nodeNumber = addresses.length;
-        String clusterName = "ViewNode-Cluster";
         RaftClusterNode[] clusterNodes = new RaftClusterNode[nodeNumber];
 
         for (int i = 0; i < nodeNumber; i++) {
             clusterNodes[i] = new RaftClusterNode(addresses[i]);
         }
 
-        RaftClusterClient client = new RaftClusterClient(clusterName, clusterNodes,
+        RaftClusterClient client = new RaftClusterClient("ViewNode", clusterNodes,
                 new Runnable() {
                     @Override
                     public void run() {
