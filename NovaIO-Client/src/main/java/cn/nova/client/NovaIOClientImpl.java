@@ -46,7 +46,7 @@ final class NovaIOClientImpl implements NovaIOClient {
     private final int updateInterval;
     private final int reconnectInterval;
 
-    NovaIOClientImpl(InetSocketAddress[] addresses,
+    NovaIOClientImpl(Collection<InetSocketAddress> addresses,
                      int timeout,
                      int ioThreadNumber,
                      int updateInterval,
@@ -85,15 +85,8 @@ final class NovaIOClientImpl implements NovaIOClient {
      * @param addresses ViewNode节点的连接地址列表
      * @return {@link RaftClusterClient}
      */
-    private RaftClusterClient initViewNodeClient(InetSocketAddress[] addresses) {
-        int nodeNumber = addresses.length;
-        RaftClusterNode[] clusterNodes = new RaftClusterNode[nodeNumber];
-
-        for (int i = 0; i < nodeNumber; i++) {
-            clusterNodes[i] = new RaftClusterNode("ViewNode", addresses[i]);
-        }
-
-        RaftClusterClient client = new RaftClusterClient(clusterNodes,
+    private RaftClusterClient initViewNodeClient(Collection<InetSocketAddress> addresses) {
+        RaftClusterClient client = new RaftClusterClient("ViewNode", addresses,
                 new Runnable() {
                     @Override
                     public void run() {
@@ -140,14 +133,7 @@ final class NovaIOClientImpl implements NovaIOClient {
                 Set<InetSocketAddress> addrSet = entry.getValue();
                 String clusterName = entry.getKey();
 
-                int nodeNumber = addrSet.size();
-                RaftClusterNode[] clusterNodes = new RaftClusterNode[nodeNumber];
-
-                for (InetSocketAddress address : addrSet) {
-                    clusterNodes[-- nodeNumber] = new RaftClusterNode(clusterName, address);
-                }
-
-                RaftClusterClient client = new RaftClusterClient(clusterNodes, null);
+                RaftClusterClient client = new RaftClusterClient(clusterName, addrSet, null);
                 dataNodeClientMap.put(clusterName, client);
                 log.info("感知到DataNode集群配置变动, 发现新集群 {}", clusterName);
 
@@ -250,15 +236,22 @@ final class NovaIOClientImpl implements NovaIOClient {
         private volatile long leaderTerm;
         private Channel leaderChannel;
 
-        private RaftClusterClient(RaftClusterNode[] clusterNodes,
+        private RaftClusterClient(String clusterName,
+                                  Collection<InetSocketAddress> addresses,
                                   Runnable leaderFirstUpdateTask) {
 
             this.updateLeaderState = new AtomicBoolean(true);
             this.pendingMessageQueue = new ConcurrentLinkedQueue<>();
+
+            this.clusterNodes = new RaftClusterNode[addresses.size()];
             this.leaderFirstUpdateTask = leaderFirstUpdateTask;
-            this.clusterNodes = clusterNodes;
             this.leaderFirstUpdate = true;
             this.leaderTerm = -1L;
+
+            int i = 0;
+            for (InetSocketAddress address : addresses) {
+                clusterNodes[i ++] = new RaftClusterNode(clusterName, address);
+            }
         }
 
         /**
@@ -445,79 +438,79 @@ final class NovaIOClientImpl implements NovaIOClient {
             }
         }
 
-    }
-
-    /**
-     * {@link RaftClusterNode}描述了一个raft集群节点的基本信息和连接状态，并提供了一些线程安全的方法
-     * 方便我们进行状态的切换和完成一些特定操作
-     *
-     * @author RealDragonking
-     */
-    private static class RaftClusterNode {
-
-        private final AtomicBoolean connectMonitor;
-        private final InetSocketAddress address;
-        private final String clusterName;
-        private volatile boolean isClosed;
-        private Channel channel;
-
-        private RaftClusterNode(String clusterName, InetSocketAddress address) {
-            this.connectMonitor = new AtomicBoolean();
-            this.clusterName = clusterName;
-            this.address = address;
-            this.isClosed = false;
-        }
-
         /**
-         * 在线程安全的前提下，检查{@link #isClosed}标志位并替换当前的{@link #channel}通信信道
+         * {@link RaftClusterNode}描述了一个raft集群节点的基本信息和连接状态，并提供了一些线程安全的方法
+         * 方便我们进行状态的切换和完成一些特定操作
          *
-         * @param channel {@link Channel}通信信道
-         * @param isSuccess {@link Channel}是否有效（即连接创建操作是否成功）
+         * @author RealDragonking
          */
-        private void setChannel(Channel channel, boolean isSuccess) {
-            synchronized (this) {
-                if (isSuccess) {
-                    if (isClosed) {
-                        channel.close();
+        private class RaftClusterNode {
+
+            private final AtomicBoolean connectMonitor;
+            private final InetSocketAddress address;
+            private final String clusterName;
+            private volatile boolean isClosed;
+            private Channel channel;
+
+            private RaftClusterNode(String clusterName, InetSocketAddress address) {
+                this.connectMonitor = new AtomicBoolean();
+                this.clusterName = clusterName;
+                this.address = address;
+                this.isClosed = false;
+            }
+
+            /**
+             * 在线程安全的前提下，检查{@link #isClosed}标志位并替换当前的{@link #channel}通信信道
+             *
+             * @param channel {@link Channel}通信信道
+             * @param isSuccess {@link Channel}是否有效（即连接创建操作是否成功）
+             */
+            private void setChannel(Channel channel, boolean isSuccess) {
+                synchronized (this) {
+                    if (isSuccess) {
+                        if (isClosed) {
+                            channel.close();
+                        } else {
+                            this.channel = channel;
+                            log.info("成功连接到 {} 集群中的 {} 节点", clusterName, address);
+                        }
                     } else {
-                        this.channel = channel;
-                        log.info("成功连接到 {} 集群中的 {} 节点", clusterName, address);
-                    }
-                } else {
-                    if (! isClosed) {
-                        log.info("无法连接到 {} 集群中的 {} 节点，准备稍后重试...", clusterName, address);
+                        if (! isClosed) {
+                            log.info("无法连接到 {} 集群中的 {} 节点，准备稍后重试...", clusterName, address);
+                        }
                     }
                 }
             }
-        }
 
-        /**
-         * 在线程安全的前提下执行通过{@link Channel#close()}完成连接断开操作
-         */
-        private void disconnect() {
-            synchronized (this) {
-                if (channel != null) {
-                    channel.close();
-                    channel = null;
-                    log.info("客户端关闭，与 {} 集群中的 {} 节点连接自动断开", clusterName, address);
+            /**
+             * 在线程安全的前提下执行通过{@link Channel#close()}完成连接断开操作
+             */
+            private void disconnect() {
+                synchronized (this) {
+                    if (channel != null) {
+                        channel.close();
+                        channel = null;
+                        log.info("客户端关闭，与 {} 集群中的 {} 节点连接自动断开", clusterName, address);
+                    }
                 }
             }
-        }
 
-        /**
-         * 进行比较并断开操作，如果{@link #channel}不为null，并且拿来比较的{@link Channel}
-         * 和{@link #channel}内存地址相同的话，我们将通过{@link Channel#close()}完成连接断开操作
-         *
-         * @param channel {@link Channel}通信信道
-         */
-        private void compareAndDisconnect(Channel channel) {
-            synchronized (this) {
-                if (this.channel != null && channel == this.channel) {
-                    this.channel.close();
-                    this.channel = null;
-                    log.info("响应超时，与 {} 集群中的 {} 节点连接自动断开", clusterName, address);
+            /**
+             * 进行比较并断开操作，如果{@link #channel}不为null，并且拿来比较的{@link Channel}
+             * 和{@link #channel}内存地址相同的话，我们将通过{@link Channel#close()}完成连接断开操作
+             *
+             * @param channel {@link Channel}通信信道
+             */
+            private void compareAndDisconnect(Channel channel) {
+                synchronized (this) {
+                    if (this.channel != null && channel == this.channel) {
+                        this.channel.close();
+                        this.channel = null;
+                        log.info("响应超时，与 {} 集群中的 {} 节点连接自动断开", clusterName, address);
+                    }
                 }
             }
+
         }
 
     }
