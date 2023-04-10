@@ -5,7 +5,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * {@link QueryDataNodeInfoResult}是获取DataNode集群信息的响应信息
+ * {@link QueryDataNodeInfoResult}对应于获取DataNode集群信息的请求，封装了一个{@link Map}
  *
  * @author RealDragonking
  */

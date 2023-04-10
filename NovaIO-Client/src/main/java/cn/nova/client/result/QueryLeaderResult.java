@@ -1,7 +1,7 @@
 package cn.nova.client.result;
 
 /**
- * {@link QueryLeaderResult}是探测ViewNode节点leader身份的响应消息
+ * {@link QueryLeaderResult}对应于探测ViewNode节点leader身份的请求，封装了{@link #isLeader}和{@link #term}
  *
  * @author RealDragonking
  */

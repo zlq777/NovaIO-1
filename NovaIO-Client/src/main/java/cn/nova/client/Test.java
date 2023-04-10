@@ -20,7 +20,7 @@ public class Test {
 
         NovaIOClient client = NovaIOClients.create(addresses);
         Thread.sleep(15000);
-        client.addNewDataNodeCluster("鸡你太美", new InetSocketAddress[] {
+        client.addDataNodeCluster("鸡你太美", new InetSocketAddress[] {
                 new InetSocketAddress("127.0.0.1", 4010),
                 new InetSocketAddress("127.0.0.1", 4011),
                 new InetSocketAddress("127.0.0.1", 4012)
@@ -42,6 +42,8 @@ public class Test {
                         log.info(result.isSuccess());
                     }
                 });
+        Thread.sleep(15000);
+        client.close();
     }
 
 }

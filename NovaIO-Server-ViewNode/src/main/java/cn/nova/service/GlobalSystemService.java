@@ -50,7 +50,7 @@ public final class GlobalSystemService {
     }
 
     /**
-     * 接收并处理请求，新增一个DataNode节点集群，如果已经存在则创建失败
+     * 接收并处理请求，新增一个DataNode节点集群，如果已经存在则新增失败
      *
      * @param channel {@link Channel}通信信道
      * @param byteBuf {@link ByteBuf}字节缓冲区

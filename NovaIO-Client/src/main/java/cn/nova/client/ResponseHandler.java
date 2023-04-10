@@ -1,7 +1,7 @@
 package cn.nova.client;
 
 import cn.nova.AsyncFuture;
-import cn.nova.client.result.ChangeDataNodeInfoResult;
+import cn.nova.client.result.OperationResult;
 import cn.nova.client.result.QueryDataNodeInfoResult;
 import cn.nova.client.result.QueryLeaderResult;
 import io.netty.buffer.ByteBuf;
@@ -50,47 +50,13 @@ public class ResponseHandler extends ChannelInboundHandlerAdapter {
 
         Class<?> typeClass = future.getResultType();
 
-        if (typeClass == QueryLeaderResult.class) {
-
-            boolean isLeader = byteBuf.readBoolean();
-            long term = byteBuf.readLong();
-            QueryLeaderResult result = new QueryLeaderResult(isLeader, term);
-
-            ((AsyncFuture<QueryLeaderResult>)future).notifyResult(result);
-
-        } else if (typeClass == ChangeDataNodeInfoResult.class) {
-
-            boolean isSuccess = byteBuf.readBoolean();
-            ChangeDataNodeInfoResult result = new ChangeDataNodeInfoResult(isSuccess);
-
-            ((AsyncFuture<ChangeDataNodeInfoResult>)future).notifyResult(result);
-
+        if (typeClass == OperationResult.class) {
+            makeOperationResult(byteBuf, (AsyncFuture<OperationResult>) future);
+        } else if (typeClass == QueryLeaderResult.class) {
+            makeQueryLeaderResult(byteBuf, (AsyncFuture<QueryLeaderResult>) future);
         } else if (typeClass == QueryDataNodeInfoResult.class) {
-
-            Map<String, Set<InetSocketAddress>> map = new HashMap<>();
-            QueryDataNodeInfoResult result = new QueryDataNodeInfoResult(map);
-
-            while (byteBuf.readableBytes() > 0) {
-
-                Set<InetSocketAddress> addrSet = createAddrSet();
-                String clusterName = readString(byteBuf);
-                int nodeNumber = byteBuf.readInt();
-
-                while (nodeNumber-- > 0){
-                    String ipAddr = readString(byteBuf);
-                    int port = byteBuf.readInt();
-
-                    addrSet.add(new InetSocketAddress(ipAddr, port));
-                }
-
-                map.put(clusterName, addrSet);
-            }
-
-            ((AsyncFuture<QueryDataNodeInfoResult>)future).notifyResult(result);
-
+            makeQueryDataNodeInfoResult(byteBuf, (AsyncFuture<QueryDataNodeInfoResult>) future);
         }
-
-        byteBuf.release();
     }
 
     /**
@@ -105,6 +71,68 @@ public class ResponseHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         cause.printStackTrace();
+    }
+
+    /**
+     * 封装{@link OperationResult}
+     *
+     * @param byteBuf {@link ByteBuf}
+     * @param asyncFuture {@link AsyncFuture}
+     */
+    private void makeOperationResult(ByteBuf byteBuf, AsyncFuture<OperationResult> asyncFuture) {
+        boolean isSuccess = byteBuf.readBoolean();
+
+        OperationResult result = new OperationResult(isSuccess);
+        asyncFuture.notifyResult(result);
+
+        byteBuf.release();
+    }
+
+    /**
+     * 封装{@link QueryLeaderResult}
+     *
+     * @param byteBuf {@link ByteBuf}
+     * @param asyncFuture {@link AsyncFuture}
+     */
+    private void makeQueryLeaderResult(ByteBuf byteBuf, AsyncFuture<QueryLeaderResult> asyncFuture) {
+        boolean isLeader = byteBuf.readBoolean();
+        long term = byteBuf.readLong();
+
+        QueryLeaderResult result = new QueryLeaderResult(isLeader, term);
+        asyncFuture.notifyResult(result);
+
+        byteBuf.release();
+    }
+
+    /**
+     * 封装{@link QueryDataNodeInfoResult}
+     *
+     * @param byteBuf {@link ByteBuf}
+     * @param asyncFuture {@link AsyncFuture}
+     */
+    private void makeQueryDataNodeInfoResult(ByteBuf byteBuf, AsyncFuture<QueryDataNodeInfoResult> asyncFuture) {
+        Map<String, Set<InetSocketAddress>> map = new HashMap<>();
+
+        while (byteBuf.readableBytes() > 0) {
+
+            Set<InetSocketAddress> addrSet = createAddrSet();
+            String clusterName = readString(byteBuf);
+            int nodeNumber = byteBuf.readInt();
+
+            while (nodeNumber-- > 0){
+                String ipAddr = readString(byteBuf);
+                int port = byteBuf.readInt();
+
+                addrSet.add(new InetSocketAddress(ipAddr, port));
+            }
+
+            map.put(clusterName, addrSet);
+        }
+
+        QueryDataNodeInfoResult result = new QueryDataNodeInfoResult(map);
+        asyncFuture.notifyResult(result);
+
+        byteBuf.release();
     }
 
 }
