@@ -23,6 +23,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static cn.nova.CommonUtils.*;
 
@@ -232,7 +234,10 @@ final class NovaIOClientImpl implements NovaIOClient {
         private final AtomicBoolean updateLeaderState;
         private final Runnable leaderFirstUpdateTask;
         private final RaftClusterNode[] clusterNodes;
+        private final String clusterName;
+        private final Lock locker;
         private volatile boolean leaderFirstUpdate;
+        private volatile boolean isClosed;
         private volatile long leaderTerm;
         private Channel leaderChannel;
 
@@ -242,11 +247,14 @@ final class NovaIOClientImpl implements NovaIOClient {
 
             this.updateLeaderState = new AtomicBoolean(true);
             this.pendingMessageQueue = new ConcurrentLinkedQueue<>();
+            this.locker = new ReentrantLock();
 
             this.clusterNodes = new RaftClusterNode[addresses.size()];
             this.leaderFirstUpdateTask = leaderFirstUpdateTask;
+            this.clusterName = clusterName;
             this.leaderFirstUpdate = true;
             this.leaderTerm = -1L;
+            this.isClosed = false;
 
             int i = 0;
             for (InetSocketAddress address : addresses) {
@@ -261,15 +269,13 @@ final class NovaIOClientImpl implements NovaIOClient {
          * @param byteBuf {@link ByteBuf}字节缓冲区
          * @param asyncFuture {@link AsyncFuture}
          */
-        private void sendMessage(ByteBuf byteBuf, AsyncFuture<?> asyncFuture) {
-            synchronized (this) {
-                if (updateLeaderState.compareAndSet(true, false)) {
-                    sendMessage0(byteBuf, asyncFuture);
-                    updateLeaderState.set(true);
-                } else {
-                    PendingMessage pending = new PendingMessage(byteBuf, asyncFuture);
-                    pendingMessageQueue.offer(pending);
-                }
+        private synchronized void sendMessage(ByteBuf byteBuf, AsyncFuture<?> asyncFuture) {
+            if (updateLeaderState.compareAndSet(true, false)) {
+                sendMessage0(byteBuf, asyncFuture);
+                updateLeaderState.set(true);
+            } else {
+                PendingMessage pending = new PendingMessage(byteBuf, asyncFuture);
+                pendingMessageQueue.offer(pending);
             }
         }
 
@@ -314,6 +320,10 @@ final class NovaIOClientImpl implements NovaIOClient {
          * 循环检测和集群节点的{@link Channel}通信信道是否活跃，并执行重连操作
          */
         private void loopConnect() {
+            if (isClosed) {
+                return;
+            }
+
             for (RaftClusterNode node : clusterNodes) {
                 if (node.channel == null && node.connectMonitor.compareAndSet(false, true)) {
 
@@ -326,6 +336,7 @@ final class NovaIOClientImpl implements NovaIOClient {
                     });
                 }
             }
+
             timer.newTimeout(t -> loopConnect(), reconnectInterval, TimeUnit.MILLISECONDS);
         }
 
@@ -333,6 +344,10 @@ final class NovaIOClientImpl implements NovaIOClient {
          * 尝试抢占{@link #updateLeaderState}标志锁，启动leader信息更新的进程
          */
         private void updateLeader() {
+            if (isClosed) {
+                return;
+            }
+
             if (updateLeaderState.compareAndSet(true, false)) {
                 if (leaderFirstUpdate) {
                     log.info("正在初始化更新leader节点位置");
@@ -354,10 +369,12 @@ final class NovaIOClientImpl implements NovaIOClient {
                     @Override
                     public void onAchieveTarget() {
                         if (leaderChannel == null) {
-                            log.info("leader节点位置更新失败，准备稍后重试...");
-                            updateLeader0();
+                            if (! isClosed) {
+                                log.info("{} 集群leader节点位置更新失败，准备稍后重试...", clusterName);
+                                updateLeader0();
+                            }
                         } else {
-                            log.info("成功更新leader节点位置，位于 {}", leaderChannel.remoteAddress());
+                            log.info("成功更新 {} 集群leader节点位置，位于 {}", clusterName, leaderChannel.remoteAddress());
                             checkLeaderFirstUpdate();
                             updateLeaderState.set(true);
                             flushPendingMessage();
@@ -399,12 +416,12 @@ final class NovaIOClientImpl implements NovaIOClient {
                     if (result == null) {
                         node.compareAndDisconnect(channel);
                     } else {
-                        synchronized (this) {
-                            if (result.isLeader() && result.getTerm() >= leaderTerm) {
-                                leaderTerm = result.getTerm();
-                                leaderChannel = channel;
-                            }
+                        locker.lock();
+                        if (result.isLeader() && result.getTerm() >= leaderTerm) {
+                            leaderTerm = result.getTerm();
+                            leaderChannel = channel;
                         }
+                        locker.unlock();
                     }
                     counter.addCount();
                 });
@@ -432,8 +449,8 @@ final class NovaIOClientImpl implements NovaIOClient {
          * 安全且优雅地关闭此{@link RaftClusterClient}
          */
         private void close() {
+            this.isClosed = true;
             for (RaftClusterNode node : clusterNodes) {
-                node.isClosed = true;
                 node.disconnect();
             }
         }
@@ -449,14 +466,12 @@ final class NovaIOClientImpl implements NovaIOClient {
             private final AtomicBoolean connectMonitor;
             private final InetSocketAddress address;
             private final String clusterName;
-            private volatile boolean isClosed;
             private Channel channel;
 
             private RaftClusterNode(String clusterName, InetSocketAddress address) {
                 this.connectMonitor = new AtomicBoolean();
                 this.clusterName = clusterName;
                 this.address = address;
-                this.isClosed = false;
             }
 
             /**
