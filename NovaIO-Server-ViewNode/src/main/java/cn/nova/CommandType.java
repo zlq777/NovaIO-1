@@ -11,6 +11,5 @@ public final class CommandType {
 
     public static final int ADD_DATANODE_CLUSTER = 0;
     public static final int REMOVE_DATANODE_CLUSTER = 1;
-    public static final int CREATE_NAMESPACE = 2;
 
 }

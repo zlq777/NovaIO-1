@@ -6,11 +6,8 @@ import cn.nova.config.NetworkConfig;
 import cn.nova.config.SourceConfig;
 import cn.nova.config.TimeConfig;
 import cn.nova.network.*;
-import cn.nova.service.DataNodeInfoService;
-import cn.nova.service.FileSystemService;
-import cn.nova.service.RaftInfoService;
+import cn.nova.service.GlobalSystemService;
 import cn.nova.struct.DataNodeInfoStruct;
-import cn.nova.struct.FileSystemStruct;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.util.HashedWheelTimer;
 import io.netty.util.ResourceLeakDetector;
@@ -41,8 +38,8 @@ public final class ViewNodeLauncher {
 
         LocalStorageGroup storageGroup = initLocalStorage();
 
-        MessageHandler udpHandler = new UDPMessageHandler();
-        MessageHandler tcpHandler = new TCPMessageHandler();
+        MsgHandler udpHandler = new UDPMsgHandler();
+        MsgHandler tcpHandler = new TCPMsgHandler();
 
         NetworkServiceGroup networkGroup = selectNetworkService(netConfig, udpHandler, tcpHandler);
         UDPService udpService = networkGroup.getUdpService();
@@ -56,11 +53,9 @@ public final class ViewNodeLauncher {
                 TimeUnit.MILLISECONDS);
 
         DataNodeInfoStruct dataNodeInfoStruct = new DataNodeInfoStruct(storageGroup);
-        FileSystemStruct fileSystemStruct = new FileSystemStruct(storageGroup);
 
         RaftCore raftCore = new ViewNodeRaftCore(
                 dataNodeInfoStruct,
-                fileSystemStruct,
                 storageGroup,
                 clusterInfo,
                 ByteBufAllocator.DEFAULT,
@@ -71,10 +66,7 @@ public final class ViewNodeLauncher {
 
         udpHandler.register(new RaftService(raftCore));
 
-        tcpHandler
-                .register(new RaftInfoService(raftCore))
-                .register(new DataNodeInfoService(raftCore, dataNodeInfoStruct))
-                .register(new FileSystemService(raftCore, fileSystemStruct));
+        tcpHandler.register(new GlobalSystemService(raftCore, dataNodeInfoStruct));
 
         onShutdown(() -> {
             timer.stop();

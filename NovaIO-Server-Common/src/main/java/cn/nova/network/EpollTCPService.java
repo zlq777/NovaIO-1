@@ -27,7 +27,7 @@ public class EpollTCPService implements TCPService {
     private final EventExecutorGroup exeThreadGroup;
     private final ServerBootstrap bootstrap;
 
-    public EpollTCPService(NetworkConfig config, MessageHandler handler) {
+    public EpollTCPService(NetworkConfig config, MsgHandler handler) {
         this.config = config;
 
         this.acceptThreadGroup = new EpollEventLoopGroup(1);

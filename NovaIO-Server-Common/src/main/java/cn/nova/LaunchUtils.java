@@ -4,6 +4,9 @@ import cn.nova.cluster.ClusterInfo;
 import cn.nova.cluster.ClusterNode;
 import cn.nova.config.NetworkConfig;
 import cn.nova.config.SourceConfig;
+import cn.nova.jsonutils.JSONParser;
+import cn.nova.jsonutils.model.JsonArray;
+import cn.nova.jsonutils.model.JsonObject;
 import cn.nova.network.*;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
@@ -16,9 +19,7 @@ import jetbrains.exodus.entitystore.PersistentEntityStores;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.InputStream;
+import java.io.*;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
@@ -71,36 +72,35 @@ public final class LaunchUtils {
         if (configFile.exists()) {
             try (InputStream input = new FileInputStream(configFile)) {
 
-                JSONObject rootInfo = JSON.parseObject(input, JSONObject.class);
+                JSONParser jsonParser = new JSONParser();
+                JsonObject info = jsonParser.fromJSON(new InputStreamReader(input),JsonObject.class);
 
-                int index = rootInfo.getIntValue("index", -1);
-                JSONObject[] otherNodeInfos = rootInfo.getObject("other-nodes", JSONObject[].class);
+                int index = info.get("index", Integer.class);
+                int num = 0;
                 List<ClusterNode> tempList = new ArrayList<>();
+                JsonArray otherJson = info.getJsonArray("other-nodes");
 
-                if (otherNodeInfos != null && index > -1) {
-                    for (JSONObject otherNodeInfo : otherNodeInfos) {
+                for(Object json : otherJson){
+                    JsonObject jsonObject = (JsonObject) json;
+                    String host = jsonObject.get("udp-host",String.class);
+                    int port = jsonObject.get("udp-port",Integer.class);
 
-                        String host = otherNodeInfo.getString("udp-host");
-                        int port = otherNodeInfo.getIntValue("udp-port");
-
-                        if (host != null) {
-                            InetSocketAddress address = new InetSocketAddress(host, port);
-                            ClusterNode node = new ClusterNode(address);
-
-                            tempList.add(node);
-                        }
+                    if (host != null) {
+                        InetSocketAddress address = new InetSocketAddress(host, port);
+                        ClusterNode node = new ClusterNode(num, address);
+                        tempList.add(node);
+                        num ++;
                     }
-
-                    int nodeNumber = tempList.size();
-                    ClusterNode[] otherNodes = new ClusterNode[nodeNumber];
-
-                    for (int i = 0; i < nodeNumber; i++) {
-                        otherNodes[i] = tempList.get(i);
-                    }
-
-                    clusterInfo = new ClusterInfo(index, otherNodes);
                 }
-            } catch (Exception e) {
+
+                ClusterNode[] otherNodes = new ClusterNode[num];
+                for (int i = 0; i < num; i++) {
+                    otherNodes[i] = tempList.get(i);
+                }
+
+                clusterInfo = new ClusterInfo(index, otherNodes);
+
+        } catch (Exception e) {
                 e.printStackTrace();
             }
         }
@@ -169,12 +169,12 @@ public final class LaunchUtils {
      * 基于当前运行环境，选择合适的{@link UDPService}和{@link TCPService}，并通过{@link NetworkServiceGroup}打包返回
      *
      * @param config {@link NetworkConfig}
-     * @param udpHandler 处理udp通信的{@link MessageHandler}
-     * @param tcpHandler 处理tcp通信的{@link MessageHandler}
+     * @param udpHandler 处理udp通信的{@link MsgHandler}
+     * @param tcpHandler 处理tcp通信的{@link MsgHandler}
      * @return {@link NetworkServiceGroup}
      */
     public static NetworkServiceGroup selectNetworkService(NetworkConfig config,
-                                                           MessageHandler udpHandler, MessageHandler tcpHandler) {
+                                                           MsgHandler udpHandler, MsgHandler tcpHandler) {
         LOG.info("正在初始化选择网络io内核...");
 
         UDPService udpService;

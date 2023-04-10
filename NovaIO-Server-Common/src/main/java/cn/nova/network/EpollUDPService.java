@@ -29,7 +29,7 @@ public final class EpollUDPService implements UDPService {
     private final Bootstrap bootstrap;
     private Entry loopEntry;
 
-    public EpollUDPService(NetworkConfig config, MessageHandler handler) {
+    public EpollUDPService(NetworkConfig config, MsgHandler handler) {
         this.config = config;
 
         ThreadFactory threadFactory;

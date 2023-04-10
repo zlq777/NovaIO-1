@@ -17,7 +17,7 @@ public final class ClusterNode {
     private volatile long inSyncEntryIndex;
     private volatile boolean isSendEnable;
 
-    public ClusterNode(InetSocketAddress address) {
+    public ClusterNode(int num, InetSocketAddress address) {
         this.inSyncEntryData = ByteBufAllocator.DEFAULT.buffer();
         this.address = address;
     }
