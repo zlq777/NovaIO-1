@@ -64,7 +64,6 @@ final class NovaIOClientImpl implements NovaIOClient {
         this.timeout = timeout;
 
         this.responseHandler = new ResponseHandler(sessionMap);
-        this.viewNodeClient = initViewNodeClient(addresses);
         this.bootstrap = new Bootstrap()
                 .group(ioThreadGroup)
                 .channel(NioSocketChannel.class)
@@ -76,6 +75,8 @@ final class NovaIOClientImpl implements NovaIOClient {
                                 .addLast(responseHandler);
                     }
                 });
+
+        this.viewNodeClient = initViewNodeClient(addresses);
     }
 
     /**
