@@ -27,7 +27,7 @@ public final class GeneralTCPService implements TCPService {
     private final EventExecutorGroup exeThreadGroup;
     private final ServerBootstrap bootstrap;
 
-    public GeneralTCPService(NetworkConfig config, MsgHandler handler) {
+    public GeneralTCPService(NetworkConfig config, MessageHandler handler) {
         this.config = config;
 
         this.acceptThreadGroup = new NioEventLoopGroup(1);

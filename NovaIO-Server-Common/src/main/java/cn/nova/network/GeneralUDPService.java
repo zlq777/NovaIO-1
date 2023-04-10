@@ -27,7 +27,7 @@ public final class GeneralUDPService implements UDPService {
     private final Bootstrap bootstrap;
     private Channel channel;
 
-    public GeneralUDPService(NetworkConfig config, MsgHandler handler) {
+    public GeneralUDPService(NetworkConfig config, MessageHandler handler) {
         this.config = config;
 
         ThreadFactory threadFactory;

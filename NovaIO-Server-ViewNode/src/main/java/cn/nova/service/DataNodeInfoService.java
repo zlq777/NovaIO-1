@@ -12,41 +12,20 @@ import io.netty.channel.Channel;
 import static cn.nova.CommandType.*;
 
 /**
- * {@link GlobalSystemService}负责提供与整个NovaIO分布式系统相关的TCP服务接口
+ * {@link DataNodeInfoService}负责提供与DataNode集群配置信息相关的TCP服务接口
  *
  * @author RealDragonking
  */
-public final class GlobalSystemService {
+public final class DataNodeInfoService {
 
     private final DataNodeInfoStruct dataNodeInfoStruct;
     private final ByteBufAllocator alloc;
     private final RaftCore raftCore;
 
-    public GlobalSystemService(RaftCore raftCore, DataNodeInfoStruct dataNodeInfoStruct) {
-        this.alloc = ByteBufAllocator.DEFAULT;
+    public DataNodeInfoService(RaftCore raftCore, DataNodeInfoStruct dataNodeInfoStruct) {
         this.dataNodeInfoStruct = dataNodeInfoStruct;
+        this.alloc = ByteBufAllocator.DEFAULT;
         this.raftCore = raftCore;
-    }
-
-    /**
-     * 接收并处理请求，查询当前节点是否获得了新任集群Leader身份
-     *
-     * @param channel {@link Channel}通信信道
-     * @param byteBuf {@link ByteBuf}字节缓冲区
-     */
-    @PathMapping(path = "/query-leader")
-    public void receiveQueryLeaderRequest(Channel channel, ByteBuf byteBuf) {
-        long sessionId = byteBuf.readLong();
-        byteBuf.release();
-
-        ByteBufMessage message = ByteBufMessage
-                .build().doWrite(res -> {
-                    res.writeLong(sessionId);
-                    res.writeBoolean(raftCore.isLeader());
-                    res.writeLong(raftCore.getCurrentTerm());
-                });
-
-        channel.writeAndFlush(message.create());
     }
 
     /**

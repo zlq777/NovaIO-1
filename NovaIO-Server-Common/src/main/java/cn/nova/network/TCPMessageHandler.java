@@ -12,16 +12,16 @@ import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 
 /**
- * UDP网络通信的消息处理者
+ * TCP网络通信的消息处理者
  *
  * @author RealDragonking
  */
 @ChannelHandler.Sharable
-public final class UDPMsgHandler extends MsgHandler {
+public final class TCPMessageHandler extends MessageHandler {
 
-    private static final Logger LOG = LogManager.getLogger(UDPMsgHandler.class);
+    private static final Logger LOG = LogManager.getLogger(TCPMessageHandler.class);
 
-    public UDPMsgHandler() {}
+    public TCPMessageHandler() {}
 
     /**
      * 对接口服务实例进行注册扫描，从中解析出{@link MethodHandle}
@@ -29,7 +29,7 @@ public final class UDPMsgHandler extends MsgHandler {
      * @param handleServiceEntity 处理服务实体
      */
     @Override
-    public void register(Object handleServiceEntity) {
+    public MessageHandler register(Object handleServiceEntity) {
         Class<?> entityClass = handleServiceEntity.getClass();
         Method[] methods = entityClass.getMethods();
         String prefixPath = "";
@@ -45,9 +45,11 @@ public final class UDPMsgHandler extends MsgHandler {
 
                 Class<?>[] params = method.getParameterTypes();
 
-                if (params.length == 1 && params[0] == DatagramPacket.class) {
+                if (params.length == 2
+                        && params[0] == Channel.class
+                        && params[1] == ByteBuf.class) {
 
-                    MethodType methodType = MethodType.methodType(void.class, DatagramPacket.class);
+                    MethodType methodType = MethodType.methodType(void.class, Channel.class, ByteBuf.class);
 
                     try {
                         MethodHandle methodHandle = lookup.bind(handleServiceEntity, method.getName(), methodType);
@@ -57,10 +59,12 @@ public final class UDPMsgHandler extends MsgHandler {
                     }
 
                 } else {
-                    LOG.error("这不是一个合法的处理服务类，合法参数类型 DatagramPacket.class，合法返回类型 void.class");
+                    LOG.error("这不是一个合法的处理服务类，合法参数类型 Channel.class ByteBuf.class，合法返回类型 void.class");
                 }
             }
         }
+
+        return this;
     }
 
     /**
@@ -74,8 +78,7 @@ public final class UDPMsgHandler extends MsgHandler {
      */
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
-        DatagramPacket packet = (DatagramPacket) msg;
-        ByteBuf content = packet.content();
+        ByteBuf content = (ByteBuf) msg;
 
         int pathLen = content.readInt();
         CharSequence path = content.readCharSequence(pathLen, StandardCharsets.UTF_8);
@@ -85,12 +88,13 @@ public final class UDPMsgHandler extends MsgHandler {
 
         if (methodHandle != null) {
             try {
-                methodHandle.invokeExact(packet);
+                methodHandle.invokeExact(ctx.channel(), content);
             } catch (Throwable t) {
                 exceptionCaught(ctx, t);
             }
         } else {
             LOG.error("无效数据，没有找到对应的处理服务");
+            content.release();
         }
     }
 

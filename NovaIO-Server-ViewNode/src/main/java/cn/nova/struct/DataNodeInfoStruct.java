@@ -15,11 +15,11 @@ import static cn.nova.CommonUtils.*;
 import static cn.nova.EntityType.*;
 
 /**
- * {@link DataNodeInfoStruct}是DataNode集群相关的信息结构体
+ * {@link DataNodeInfoStruct}是DataNode集群相关的信息结构体，提供了增改、查询、持久化DataNode集群信息的接口方法
  *
  * @author RealDragonking
  */
-public class DataNodeInfoStruct {
+public final class DataNodeInfoStruct {
 
     private final Map<String, Set<InetSocketAddress>> clusterInfoMap;
     private final PersistentEntityStore entityStore;

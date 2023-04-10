@@ -8,18 +8,18 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * {@link MsgHandler}定义了网络通信中的消息处理者，实现了{@link ChannelInboundHandler}，
+ * {@link MessageHandler}定义了网络通信中的消息处理者，实现了{@link ChannelInboundHandler}，
  * 能够注册处理接口服务类、找到对应的接口来处理接收到的消息
  *
  * @author RealDragonking
  */
 @ChannelHandler.Sharable
-public abstract class MsgHandler extends ChannelInboundHandlerAdapter {
+public abstract class MessageHandler extends ChannelInboundHandlerAdapter {
 
     protected final MethodHandles.Lookup lookup;
     protected final Map<CharSequence, MethodHandle> methodHandleMap;
 
-    public MsgHandler() {
+    public MessageHandler() {
         this.lookup = MethodHandles.publicLookup();
         this.methodHandleMap = new HashMap<>();
     }
@@ -29,7 +29,7 @@ public abstract class MsgHandler extends ChannelInboundHandlerAdapter {
      *
      * @param handleServiceEntity 处理服务实体
      */
-    public abstract void register(Object handleServiceEntity);
+    public abstract MessageHandler register(Object handleServiceEntity);
 
     /**
      * Calls {@link ChannelHandlerContext#fireExceptionCaught(Throwable)} to forward

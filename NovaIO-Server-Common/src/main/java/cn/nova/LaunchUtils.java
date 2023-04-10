@@ -169,12 +169,12 @@ public final class LaunchUtils {
      * 基于当前运行环境，选择合适的{@link UDPService}和{@link TCPService}，并通过{@link NetworkServiceGroup}打包返回
      *
      * @param config {@link NetworkConfig}
-     * @param udpHandler 处理udp通信的{@link MsgHandler}
-     * @param tcpHandler 处理tcp通信的{@link MsgHandler}
+     * @param udpHandler 处理udp通信的{@link MessageHandler}
+     * @param tcpHandler 处理tcp通信的{@link MessageHandler}
      * @return {@link NetworkServiceGroup}
      */
     public static NetworkServiceGroup selectNetworkService(NetworkConfig config,
-                                                           MsgHandler udpHandler, MsgHandler tcpHandler) {
+                                                           MessageHandler udpHandler, MessageHandler tcpHandler) {
         LOG.info("正在初始化选择网络io内核...");
 
         UDPService udpService;

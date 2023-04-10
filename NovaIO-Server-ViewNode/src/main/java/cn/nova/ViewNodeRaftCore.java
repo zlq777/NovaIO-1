@@ -5,6 +5,7 @@ import cn.nova.cluster.ClusterInfo;
 import cn.nova.config.TimeConfig;
 import cn.nova.network.UDPService;
 import cn.nova.struct.DataNodeInfoStruct;
+import cn.nova.struct.FileSystemStruct;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.util.Timer;
@@ -23,8 +24,10 @@ import static cn.nova.CommonUtils.*;
 public final class ViewNodeRaftCore extends AbstractRaftCore {
 
     private final DataNodeInfoStruct dataNodeInfoStruct;
+    private final FileSystemStruct fileSystemStruct;
 
     public ViewNodeRaftCore(DataNodeInfoStruct dataNodeInfoStruct,
+                            FileSystemStruct fileSystemStruct,
                             LocalStorageGroup storageGroup,
                             ClusterInfo clusterInfo,
                             ByteBufAllocator alloc,
@@ -35,6 +38,7 @@ public final class ViewNodeRaftCore extends AbstractRaftCore {
 
         super(storageGroup, clusterInfo, alloc, timeConfig, udpService, timer, tickTime);
         this.dataNodeInfoStruct = dataNodeInfoStruct;
+        this.fileSystemStruct = fileSystemStruct;
     }
 
     /**
