@@ -39,8 +39,10 @@ final class NovaIOClientImpl implements NovaIOClient {
     private final Map<Long, AsyncFuture<?>> sessionMap;
     private final RaftClusterClient viewNodeClient;
     private final ResponseHandler responseHandler;
+    private final EventLoopGroup ioThreadGroup;
+    private final Bootstrap bootstrap;
+    private final Timer timer;
     private final int timeout;
-    private final int ioThreadNumber;
     private final int updateInterval;
     private final int reconnectInterval;
 
@@ -50,15 +52,30 @@ final class NovaIOClientImpl implements NovaIOClient {
                      int updateInterval,
                      int reconnectInterval) {
 
+        ThreadFactory timerThreadFactory = getThreadFactory("NovaIO-Timer", false);
+        ThreadFactory ioThreadFactory = getThreadFactory("NovaIO-io", true);
+
+        this.ioThreadGroup = new NioEventLoopGroup(ioThreadNumber, ioThreadFactory);
+        this.timer = new HashedWheelTimer(timerThreadFactory);
         this.dataNodeClientMap = new ConcurrentHashMap<>();
         this.sessionMap = new ConcurrentHashMap<>();
         this.reconnectInterval = reconnectInterval;
         this.updateInterval = updateInterval;
-        this.ioThreadNumber = ioThreadNumber;
         this.timeout = timeout;
 
         this.responseHandler = new ResponseHandler(sessionMap);
         this.viewNodeClient = initViewNodeClient(addresses);
+        this.bootstrap = new Bootstrap()
+                .group(ioThreadGroup)
+                .channel(NioSocketChannel.class)
+                .handler(new ChannelInitializer<SocketChannel>() {
+                    @Override
+                    protected void initChannel(SocketChannel ch) {
+                        ChannelPipeline pipeline = ch.pipeline();
+                        pipeline.addLast(new LengthFieldBasedFrameDecoder(MAX_FRAME_LENGTH, 0, 4, 0, 4))
+                                .addLast(responseHandler);
+                    }
+                });
     }
 
     /**
@@ -72,10 +89,10 @@ final class NovaIOClientImpl implements NovaIOClient {
         RaftClusterNode[] clusterNodes = new RaftClusterNode[nodeNumber];
 
         for (int i = 0; i < nodeNumber; i++) {
-            clusterNodes[i] = new RaftClusterNode(addresses[i]);
+            clusterNodes[i] = new RaftClusterNode("ViewNode", addresses[i]);
         }
 
-        RaftClusterClient client = new RaftClusterClient("ViewNode", clusterNodes,
+        RaftClusterClient client = new RaftClusterClient(clusterNodes,
                 new Runnable() {
                     @Override
                     public void run() {
@@ -93,7 +110,7 @@ final class NovaIOClientImpl implements NovaIOClient {
                             }
                         });
 
-                        viewNodeClient.timer.newTimeout(t -> run(), updateInterval, TimeUnit.MILLISECONDS);
+                        timer.newTimeout(t -> run(), updateInterval, TimeUnit.MILLISECONDS);
                     }
                 });
 
@@ -126,10 +143,10 @@ final class NovaIOClientImpl implements NovaIOClient {
                 RaftClusterNode[] clusterNodes = new RaftClusterNode[nodeNumber];
 
                 for (InetSocketAddress address : addrSet) {
-                    clusterNodes[-- nodeNumber] = new RaftClusterNode(address);
+                    clusterNodes[-- nodeNumber] = new RaftClusterNode(clusterName, address);
                 }
 
-                RaftClusterClient client = new RaftClusterClient("DataNode-" + clusterName, clusterNodes, null);
+                RaftClusterClient client = new RaftClusterClient(clusterNodes, null);
                 dataNodeClientMap.put(clusterName, client);
                 log.info("感知到DataNode集群配置变动, 发现新集群 {}", clusterName);
 
@@ -196,7 +213,10 @@ final class NovaIOClientImpl implements NovaIOClient {
      */
     @Override
     public void close() {
+        timer.stop();
         viewNodeClient.close();
+        ioThreadGroup.shutdownGracefully();
+
         for (RaftClusterClient client : dataNodeClientMap.values()) {
             client.close();
         }
@@ -225,41 +245,19 @@ final class NovaIOClientImpl implements NovaIOClient {
         private final AtomicBoolean updateLeaderState;
         private final Runnable leaderFirstUpdateTask;
         private final RaftClusterNode[] clusterNodes;
-        private final EventLoopGroup ioThreadGroup;
-        private final Bootstrap bootstrap;
-        private final Timer timer;
         private volatile boolean leaderFirstUpdate;
         private volatile long leaderTerm;
         private Channel leaderChannel;
 
-        private RaftClusterClient(String clusterName,
-                                  RaftClusterNode[] clusterNodes,
+        private RaftClusterClient(RaftClusterNode[] clusterNodes,
                                   Runnable leaderFirstUpdateTask) {
 
-            ThreadFactory timerThreadFactory = getThreadFactory(clusterName + "-Timer", false);
-            ThreadFactory ioThreadFactory = getThreadFactory(clusterName + "-io", true);
-
+            this.updateLeaderState = new AtomicBoolean(true);
+            this.pendingMessageQueue = new ConcurrentLinkedQueue<>();
             this.leaderFirstUpdateTask = leaderFirstUpdateTask;
             this.clusterNodes = clusterNodes;
             this.leaderFirstUpdate = true;
             this.leaderTerm = -1L;
-
-            this.ioThreadGroup = new NioEventLoopGroup(ioThreadNumber, ioThreadFactory);
-            this.updateLeaderState = new AtomicBoolean(true);
-            this.pendingMessageQueue = new ConcurrentLinkedQueue<>();
-            this.timer = new HashedWheelTimer(timerThreadFactory);
-
-            this.bootstrap = new Bootstrap()
-                .group(ioThreadGroup)
-                .channel(NioSocketChannel.class)
-                .handler(new ChannelInitializer<SocketChannel>() {
-                    @Override
-                    protected void initChannel(SocketChannel ch) {
-                        ChannelPipeline pipeline = ch.pipeline();
-                        pipeline.addLast(new LengthFieldBasedFrameDecoder(MAX_FRAME_LENGTH, 0, 4, 0, 4))
-                                .addLast(responseHandler);
-                    }
-                });
         }
 
         /**
@@ -440,9 +438,6 @@ final class NovaIOClientImpl implements NovaIOClient {
          * 安全且优雅地关闭此{@link RaftClusterClient}
          */
         private void close() {
-            timer.stop();
-            ioThreadGroup.shutdownGracefully();
-
             for (RaftClusterNode node : clusterNodes) {
                 node.isClosed = true;
                 node.disconnect();
@@ -461,11 +456,13 @@ final class NovaIOClientImpl implements NovaIOClient {
 
         private final AtomicBoolean connectMonitor;
         private final InetSocketAddress address;
+        private final String clusterName;
         private volatile boolean isClosed;
         private Channel channel;
 
-        private RaftClusterNode(InetSocketAddress address) {
+        private RaftClusterNode(String clusterName, InetSocketAddress address) {
             this.connectMonitor = new AtomicBoolean();
+            this.clusterName = clusterName;
             this.address = address;
             this.isClosed = false;
         }
@@ -483,11 +480,11 @@ final class NovaIOClientImpl implements NovaIOClient {
                         channel.close();
                     } else {
                         this.channel = channel;
-                        log.info("成功连接到位于 {} 的节点", address);
+                        log.info("成功连接到 {} 集群中的 {} 节点", clusterName, address);
                     }
                 } else {
                     if (! isClosed) {
-                        log.info("无法连接到位于 {} 的节点，准备稍后重试...", address);
+                        log.info("无法连接到 {} 集群中的 {} 节点，准备稍后重试...", clusterName, address);
                     }
                 }
             }
@@ -501,7 +498,7 @@ final class NovaIOClientImpl implements NovaIOClient {
                 if (channel != null) {
                     channel.close();
                     channel = null;
-                    log.info("客户端关闭，与位于 {} 的节点连接自动断开", address);
+                    log.info("客户端关闭，与 {} 集群中的 {} 节点连接自动断开", clusterName, address);
                 }
             }
         }
@@ -517,7 +514,7 @@ final class NovaIOClientImpl implements NovaIOClient {
                 if (this.channel != null && channel == this.channel) {
                     this.channel.close();
                     this.channel = null;
-                    log.info("响应超时，与位于 {} 的节点连接自动断开", address);
+                    log.info("响应超时，与 {} 集群中的 {} 节点连接自动断开", clusterName, address);
                 }
             }
         }
